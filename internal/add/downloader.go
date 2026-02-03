@@ -22,14 +22,11 @@ func (c *Client) getGitHubContents(ctx context.Context, repoInfo *GitHubRepoInfo
 	apiURL := fmt.Sprintf("%s/repos/%s/%s/contents/%s?ref=%s", c.baseURL, repoInfo.Owner, repoInfo.Repo, path, repoInfo.Branch)
 
 	var lastErr error
-	for attempt := 0; attempt < maxRetryAttempts; attempt++ {
+	for attempt := range maxRetryAttempts {
 		resp, err := c.restyClient.R().SetContext(ctx).Get(apiURL)
 		if err != nil {
 			if isRateLimitError(err) && attempt < maxRetryAttempts-1 {
-				backoff := time.Duration(1<<uint(attempt)) * time.Second
-				if backoff > 16*time.Second {
-					backoff = 16 * time.Second
-				}
+				backoff := min(time.Duration(1<<uint(attempt))*time.Second, 16*time.Second)
 
 				c.logger.Warn("Rate limit hit, backing off", "attempt", attempt+1, "backoff", backoff)
 
@@ -46,10 +43,7 @@ func (c *Client) getGitHubContents(ctx context.Context, repoInfo *GitHubRepoInfo
 
 		if resp.StatusCode() != 200 {
 			if isRateLimitError(err) && attempt < maxRetryAttempts-1 {
-				backoff := time.Duration(1<<uint(attempt)) * time.Second
-				if backoff > 16*time.Second {
-					backoff = 16 * time.Second
-				}
+				backoff := min(time.Duration(1<<uint(attempt))*time.Second, 16*time.Second)
 
 				c.logger.Warn("Rate limit hit, backing off", "attempt", attempt+1, "backoff", backoff)
 
@@ -77,14 +71,11 @@ func (c *Client) getGitHubContents(ctx context.Context, repoInfo *GitHubRepoInfo
 
 func (c *Client) downloadFile(ctx context.Context, downloadURL string) ([]byte, error) {
 	var lastErr error
-	for attempt := 0; attempt < maxRetryAttempts; attempt++ {
+	for attempt := range maxRetryAttempts {
 		resp, err := c.restyClient.R().SetContext(ctx).Get(downloadURL)
 		if err != nil {
 			if isRateLimitError(err) && attempt < maxRetryAttempts-1 {
-				backoff := time.Duration(1<<uint(attempt)) * time.Second
-				if backoff > 16*time.Second {
-					backoff = 16 * time.Second
-				}
+				backoff := min(time.Duration(1<<uint(attempt))*time.Second, 16*time.Second)
 
 				c.logger.Warn("Rate limit hit, backing off", "attempt", attempt+1, "backoff", backoff)
 
@@ -101,10 +92,7 @@ func (c *Client) downloadFile(ctx context.Context, downloadURL string) ([]byte, 
 
 		if resp.StatusCode() != 200 {
 			if isRateLimitError(err) && attempt < maxRetryAttempts-1 {
-				backoff := time.Duration(1<<uint(attempt)) * time.Second
-				if backoff > 16*time.Second {
-					backoff = 16 * time.Second
-				}
+				backoff := min(time.Duration(1<<uint(attempt))*time.Second, 16*time.Second)
 
 				c.logger.Warn("Rate limit hit, backing off", "attempt", attempt+1, "backoff", backoff)
 

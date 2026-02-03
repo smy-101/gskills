@@ -24,10 +24,3 @@ type GitHubContent struct {
 	HTMLURL     string `json:"html_url"`
 	DownloadURL string `json:"download_url"`
 }
-
-// AddOptions 添加选项
-type AddOptions struct {
-	Force      bool   // 强制覆盖
-	SkipLinks  bool   // 跳过软链接创建
-	TargetPath string // 指定目标路径
-}

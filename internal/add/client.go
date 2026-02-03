@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/smy-101/gskills/internal/types"
 )
 
 const (
@@ -204,6 +205,21 @@ func (c *Client) Download(rawURL string) error {
 	fmt.Printf("  Directories created: %d\n", stats.DirsCreated)
 	fmt.Printf("  Total size: %d bytes\n", stats.BytesDownloaded)
 	fmt.Printf("  Location: %s\n", localPath)
+
+	skillMetadata := &types.SkillMetadata{
+		ID:        fmt.Sprintf("%s@%s", skillName, repoInfo.Branch),
+		Name:      skillName,
+		Version:   repoInfo.Branch,
+		SourceURL: rawURL,
+		StorePath: localPath,
+		UpdatedAt: time.Now(),
+	}
+	if err := addOrUpdateSkill(skillMetadata); err != nil {
+		c.logger.Error("Failed to update skills registry", err, "skill", skillName)
+		fmt.Printf("Warning: Failed to update skills registry: %v\n", err)
+		fmt.Println("The skill was downloaded successfully, but may not appear in 'gskills list'.")
+		fmt.Println("You may need to manually clean up ~/.gskills/skills.json if this persists.")
+	}
 
 	return nil
 }
