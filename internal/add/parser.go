@@ -3,7 +3,7 @@ package add
 import (
 	"fmt"
 	"net/url"
-	"path/filepath"
+	pathpkg "path"
 	"strings"
 )
 
@@ -45,7 +45,7 @@ func parseGitHubURL(rawURL string) (*GitHubRepoInfo, error) {
 	if len(pathParts) >= 4 && pathParts[2] == "tree" {
 		branch = pathParts[3]
 		if len(pathParts) > 4 {
-			path = filepath.Join(pathParts[4:]...)
+			path = pathpkg.Join(pathParts[4:]...)
 		}
 	} else if len(pathParts) >= 3 {
 		return nil, fmt.Errorf("branch must be specified in URL (use format: https://github.com/owner/repo/tree/branch/path)")

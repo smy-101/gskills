@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sync"
 	"time"
@@ -224,6 +225,11 @@ func (c *Client) Download(rawURL string) error {
 	return nil
 }
 
+type downloadTask struct {
+	remotePath string
+	localPath  string
+}
+
 func (c *Client) downloadRecursive(ctx context.Context, repoInfo *GitHubRepoInfo, localPath string, downloadPath string) (*DownloadStats, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -277,7 +283,7 @@ func (c *Client) downloadRecursive(ctx context.Context, repoInfo *GitHubRepoInfo
 				mu.Unlock()
 
 				wg.Add(1)
-				go downloadTask(filepath.Join(remotePath, item.Name), itemLocalPath)
+				go downloadTask(path.Join(remotePath, item.Name), itemLocalPath)
 			case "file":
 				data, err := c.downloadFile(ctx, item.DownloadURL)
 				if err != nil {
@@ -313,4 +319,70 @@ func (c *Client) downloadRecursive(ctx context.Context, repoInfo *GitHubRepoInfo
 	}
 
 	return stats, nil
+}
+
+func (c *Client) processDirectory(
+	ctx context.Context,
+	repoInfo *GitHubRepoInfo,
+	task downloadTask,
+	stats *DownloadStats,
+	taskQueue chan downloadTask,
+	pendingTasks *int64,
+	pendingMu *sync.Mutex,
+) error {
+	contents, err := c.getGitHubContents(ctx, repoInfo, task.remotePath)
+	if err != nil {
+		return fmt.Errorf("failed to get contents for %s: %w", task.remotePath, err)
+	}
+
+	var mu sync.Mutex
+
+	pendingMu.Lock()
+	*pendingTasks--
+	pendingMu.Unlock()
+
+	for _, item := range contents {
+		itemLocalPath := filepath.Join(task.localPath, item.Name)
+
+		switch item.Type {
+		case "dir":
+			if err := os.MkdirAll(itemLocalPath, 0755); err != nil {
+				return fmt.Errorf("failed to create directory %s: %w", itemLocalPath, err)
+			}
+
+			mu.Lock()
+			stats.DirsCreated++
+			mu.Unlock()
+
+			pendingMu.Lock()
+			*pendingTasks++
+			pendingMu.Unlock()
+
+			select {
+			case taskQueue <- downloadTask{
+				remotePath: path.Join(task.remotePath, item.Name),
+				localPath:  itemLocalPath,
+			}:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+
+		case "file":
+			data, err := c.downloadFile(ctx, item.DownloadURL)
+			if err != nil {
+				return fmt.Errorf("failed to download file %s: %w", item.Name, err)
+			}
+
+			if err := os.WriteFile(itemLocalPath, data, 0644); err != nil {
+				return fmt.Errorf("failed to write file %s: %w", itemLocalPath, err)
+			}
+
+			mu.Lock()
+			stats.FilesDownloaded++
+			stats.BytesDownloaded += int64(len(data))
+			mu.Unlock()
+		}
+	}
+
+	return nil
 }

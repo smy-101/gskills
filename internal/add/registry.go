@@ -56,7 +56,7 @@ func SaveRegistry(skills []types.SkillMetadata) error {
 		return err
 	}
 
-	return saveRegistryWithPath(registryPath, skills)
+	return SaveRegistryWithPath(registryPath, skills)
 }
 
 func SaveRegistryWithPath(registryPath string, skills []types.SkillMetadata) error {
@@ -81,10 +81,6 @@ func SaveRegistryWithPath(registryPath string, skills []types.SkillMetadata) err
 	}
 
 	return nil
-}
-
-func saveRegistryWithPath(registryPath string, skills []types.SkillMetadata) error {
-	return SaveRegistryWithPath(registryPath, skills)
 }
 
 func validateSkillMetadata(skill *types.SkillMetadata) error {
@@ -147,7 +143,7 @@ func addOrUpdateSkillWithPath(registryPath string, skill *types.SkillMetadata) e
 		skills = append(skills, *skill)
 	}
 
-	return saveRegistryWithPath(registryPath, skills)
+	return SaveRegistryWithPath(registryPath, skills)
 }
 
 func RemoveSkill(skillID string) error {
@@ -184,5 +180,5 @@ func removeSkillWithPath(registryPath string, skillID string) error {
 		}
 	}
 
-	return saveRegistryWithPath(registryPath, newSkills)
+	return SaveRegistryWithPath(registryPath, newSkills)
 }

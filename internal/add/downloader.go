@@ -10,6 +10,10 @@ import (
 	"github.com/smy-101/gskills/internal/types"
 )
 
+func isRateLimitResponse(statusCode int) bool {
+	return statusCode == 403 || statusCode == 429
+}
+
 func isRateLimitError(err error) bool {
 	if err == nil {
 		return false
@@ -42,7 +46,7 @@ func (c *Client) getGitHubContents(ctx context.Context, repoInfo *GitHubRepoInfo
 		}
 
 		if resp.StatusCode() != 200 {
-			if isRateLimitError(err) && attempt < maxRetryAttempts-1 {
+			if isRateLimitResponse(resp.StatusCode()) && attempt < maxRetryAttempts-1 {
 				backoff := min(time.Duration(1<<uint(attempt))*time.Second, 16*time.Second)
 
 				c.logger.Warn("Rate limit hit, backing off", "attempt", attempt+1, "backoff", backoff)
@@ -91,7 +95,7 @@ func (c *Client) downloadFile(ctx context.Context, downloadURL string) ([]byte, 
 		}
 
 		if resp.StatusCode() != 200 {
-			if isRateLimitError(err) && attempt < maxRetryAttempts-1 {
+			if isRateLimitResponse(resp.StatusCode()) && attempt < maxRetryAttempts-1 {
 				backoff := min(time.Duration(1<<uint(attempt))*time.Second, 16*time.Second)
 
 				c.logger.Warn("Rate limit hit, backing off", "attempt", attempt+1, "backoff", backoff)

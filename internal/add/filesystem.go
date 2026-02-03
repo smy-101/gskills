@@ -27,7 +27,7 @@ func promptOverwrite() (bool, error) {
 		if err == io.EOF {
 			return false, nil
 		}
-		return false, fmt.Errorf("failed to read input: %w", err)
+		return false, nil
 	}
 
 	response = strings.TrimSpace(strings.ToLower(response))

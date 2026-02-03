@@ -3,11 +3,11 @@ package add
 import (
 	"context"
 	"fmt"
-	"path/filepath"
+	"path"
 )
 
 func (c *Client) checkSKILLExists(ctx context.Context, repoInfo *GitHubRepoInfo) (bool, error) {
-	apiURL := fmt.Sprintf("%s/repos/%s/%s/contents/%s?ref=%s", c.baseURL, repoInfo.Owner, repoInfo.Repo, filepath.Join(repoInfo.Path, "SKILL.md"), repoInfo.Branch)
+	apiURL := fmt.Sprintf("%s/repos/%s/%s/contents/%s?ref=%s", c.baseURL, repoInfo.Owner, repoInfo.Repo, path.Join(repoInfo.Path, "SKILL.md"), repoInfo.Branch)
 
 	resp, err := c.restyClient.R().SetContext(ctx).Get(apiURL)
 	if err != nil {

@@ -539,7 +539,7 @@ func TestLoadRegistry(t *testing.T) {
 						StorePath: "/home/test/.gskills/skills/test-skill",
 					},
 				}
-				if err := saveRegistryWithPath(registryPath, skills); err != nil {
+				if err := SaveRegistryWithPath(registryPath, skills); err != nil {
 					t.Fatalf("setup failed: %v", err)
 				}
 			},
@@ -574,7 +574,7 @@ func TestLoadRegistry(t *testing.T) {
 						StorePath: "/home/test/.gskills/skills/skill-b",
 					},
 				}
-				if err := saveRegistryWithPath(registryPath, skills); err != nil {
+				if err := SaveRegistryWithPath(registryPath, skills); err != nil {
 					t.Fatalf("setup failed: %v", err)
 				}
 			},
@@ -708,7 +708,7 @@ func TestSaveRegistry(t *testing.T) {
 						StorePath: "/home/test/.gskills/skills/old-skill",
 					},
 				}
-				if err := saveRegistryWithPath(registryPath, existingSkills); err != nil {
+				if err := SaveRegistryWithPath(registryPath, existingSkills); err != nil {
 					t.Fatalf("setup failed: %v", err)
 				}
 			},
@@ -724,30 +724,30 @@ func TestSaveRegistry(t *testing.T) {
 				tt.setupFile(t, registryPath)
 			}
 
-			err := saveRegistryWithPath(registryPath, tt.skills)
+			err := SaveRegistryWithPath(registryPath, tt.skills)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("saveRegistryWithPath() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("SaveRegistryWithPath() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
 			if !tt.wantErr {
 				loadedSkills, err := loadRegistryWithPath(registryPath)
 				if err != nil {
-					t.Errorf("saveRegistryWithPath() failed to load saved data: %v", err)
+					t.Errorf("SaveRegistryWithPath() failed to load saved data: %v", err)
 					return
 				}
 				if len(loadedSkills) != len(tt.skills) {
-					t.Errorf("saveRegistryWithPath() saved %d skills, want %d", len(loadedSkills), len(tt.skills))
+					t.Errorf("SaveRegistryWithPath() saved %d skills, want %d", len(loadedSkills), len(tt.skills))
 				}
 				for i, skill := range loadedSkills {
 					if skill.ID != tt.skills[i].ID {
-						t.Errorf("saveRegistryWithPath()[%d].ID = %v, want %v", i, skill.ID, tt.skills[i].ID)
+						t.Errorf("SaveRegistryWithPath()[%d].ID = %v, want %v", i, skill.ID, tt.skills[i].ID)
 					}
 					if skill.Name != tt.skills[i].Name {
-						t.Errorf("saveRegistryWithPath()[%d].Name = %v, want %v", i, skill.Name, tt.skills[i].Name)
+						t.Errorf("SaveRegistryWithPath()[%d].Name = %v, want %v", i, skill.Name, tt.skills[i].Name)
 					}
 					if skill.Version != tt.skills[i].Version {
-						t.Errorf("saveRegistryWithPath()[%d].Version = %v, want %v", i, skill.Version, tt.skills[i].Version)
+						t.Errorf("SaveRegistryWithPath()[%d].Version = %v, want %v", i, skill.Version, tt.skills[i].Version)
 					}
 				}
 			}
@@ -775,13 +775,13 @@ func TestSaveRegistryAtomic(t *testing.T) {
 		t.Fatalf("failed to create initial file: %v", err)
 	}
 
-	err := saveRegistryWithPath(registryPath, skills)
+	err := SaveRegistryWithPath(registryPath, skills)
 	if err != nil {
-		t.Fatalf("saveRegistryWithPath() error = %v", err)
+		t.Fatalf("SaveRegistryWithPath() error = %v", err)
 	}
 
 	if _, err := os.Stat(tmpPath); !os.IsNotExist(err) {
-		t.Error("saveRegistryWithPath() temporary file was not cleaned up")
+		t.Error("SaveRegistryWithPath() temporary file was not cleaned up")
 	}
 
 	data, err := os.ReadFile(registryPath)
@@ -789,7 +789,7 @@ func TestSaveRegistryAtomic(t *testing.T) {
 		t.Fatalf("failed to read saved file: %v", err)
 	}
 	if string(data) == string(initialData) {
-		t.Error("saveRegistryWithPath() did not update the file")
+		t.Error("SaveRegistryWithPath() did not update the file")
 	}
 }
 
@@ -829,7 +829,7 @@ func TestAddOrUpdateSkill(t *testing.T) {
 						StorePath: "/home/test/.gskills/skills/existing-skill",
 					},
 				}
-				if err := saveRegistryWithPath(registryPath, existingSkills); err != nil {
+				if err := SaveRegistryWithPath(registryPath, existingSkills); err != nil {
 					t.Fatalf("setup failed: %v", err)
 				}
 			},
@@ -856,7 +856,7 @@ func TestAddOrUpdateSkill(t *testing.T) {
 						StorePath: "/home/test/.gskills/skills/skill",
 					},
 				}
-				if err := saveRegistryWithPath(registryPath, existingSkills); err != nil {
+				if err := SaveRegistryWithPath(registryPath, existingSkills); err != nil {
 					t.Fatalf("setup failed: %v", err)
 				}
 			},
@@ -883,7 +883,7 @@ func TestAddOrUpdateSkill(t *testing.T) {
 						StorePath: "/home/test/.gskills/skills/skill-a",
 					},
 				}
-				if err := saveRegistryWithPath(registryPath, existingSkills); err != nil {
+				if err := SaveRegistryWithPath(registryPath, existingSkills); err != nil {
 					t.Fatalf("setup failed: %v", err)
 				}
 			},
@@ -970,7 +970,7 @@ func TestRemoveSkill(t *testing.T) {
 						StorePath: "/home/test/.gskills/skills/skill-b",
 					},
 				}
-				if err := saveRegistryWithPath(registryPath, skills); err != nil {
+				if err := SaveRegistryWithPath(registryPath, skills); err != nil {
 					t.Fatalf("setup failed: %v", err)
 				}
 			},
@@ -994,7 +994,7 @@ func TestRemoveSkill(t *testing.T) {
 						StorePath: "/home/test/.gskills/skills/skill-a",
 					},
 				}
-				if err := saveRegistryWithPath(registryPath, skills); err != nil {
+				if err := SaveRegistryWithPath(registryPath, skills); err != nil {
 					t.Fatalf("setup failed: %v", err)
 				}
 			},
