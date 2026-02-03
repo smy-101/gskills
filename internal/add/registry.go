@@ -24,7 +24,7 @@ func getRegistryPath() (string, error) {
 	return filepath.Join(homeDir, ".gskills", skillsRegistryFile), nil
 }
 
-func loadRegistry() ([]types.SkillMetadata, error) {
+func LoadRegistry() ([]types.SkillMetadata, error) {
 	registryPath, err := getRegistryPath()
 	if err != nil {
 		return nil, err
@@ -50,7 +50,7 @@ func loadRegistryWithPath(registryPath string) ([]types.SkillMetadata, error) {
 	return skills, nil
 }
 
-func saveRegistry(skills []types.SkillMetadata) error {
+func SaveRegistry(skills []types.SkillMetadata) error {
 	registryPath, err := getRegistryPath()
 	if err != nil {
 		return err
@@ -59,7 +59,7 @@ func saveRegistry(skills []types.SkillMetadata) error {
 	return saveRegistryWithPath(registryPath, skills)
 }
 
-func saveRegistryWithPath(registryPath string, skills []types.SkillMetadata) error {
+func SaveRegistryWithPath(registryPath string, skills []types.SkillMetadata) error {
 	registryDir := filepath.Dir(registryPath)
 	if err := os.MkdirAll(registryDir, 0755); err != nil {
 		return fmt.Errorf("failed to create registry directory: %w", err)
@@ -81,6 +81,10 @@ func saveRegistryWithPath(registryPath string, skills []types.SkillMetadata) err
 	}
 
 	return nil
+}
+
+func saveRegistryWithPath(registryPath string, skills []types.SkillMetadata) error {
+	return SaveRegistryWithPath(registryPath, skills)
 }
 
 func validateSkillMetadata(skill *types.SkillMetadata) error {
@@ -146,7 +150,7 @@ func addOrUpdateSkillWithPath(registryPath string, skill *types.SkillMetadata) e
 	return saveRegistryWithPath(registryPath, skills)
 }
 
-func removeSkill(skillID string) error {
+func RemoveSkill(skillID string) error {
 	if skillID == "" {
 		return fmt.Errorf("skill ID cannot be empty")
 	}
