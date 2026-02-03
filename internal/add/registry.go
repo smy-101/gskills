@@ -105,7 +105,7 @@ func validateSkillMetadata(skill *types.SkillMetadata) error {
 	return nil
 }
 
-func addOrUpdateSkill(skill *types.SkillMetadata) error {
+func AddOrUpdateSkill(skill *types.SkillMetadata) error {
 	if err := validateSkillMetadata(skill); err != nil {
 		return err
 	}
@@ -181,4 +181,65 @@ func removeSkillWithPath(registryPath string, skillID string) error {
 	}
 
 	return SaveRegistryWithPath(registryPath, newSkills)
+}
+
+// FindSkillByName searches for a skill by its name in the registry.
+// Returns the skill metadata if found, or an error if not found.
+func FindSkillByName(name string) (*types.SkillMetadata, error) {
+	if name == "" {
+		return nil, fmt.Errorf("skill name cannot be empty")
+	}
+
+	skills, err := LoadRegistry()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load registry: %w", err)
+	}
+
+	for i := range skills {
+		if skills[i].Name == name {
+			return &skills[i], nil
+		}
+	}
+
+	return nil, fmt.Errorf("skill '%s' not found in registry", name)
+}
+
+// UpdateSkill updates an existing skill's metadata in the registry.
+// The skill must have a valid ID that exists in the registry.
+func UpdateSkill(skill *types.SkillMetadata) error {
+	if skill == nil {
+		return fmt.Errorf("skill cannot be nil")
+	}
+	if skill.ID == "" {
+		return fmt.Errorf("skill ID cannot be empty")
+	}
+
+	registryPath, err := getRegistryPath()
+	if err != nil {
+		return err
+	}
+
+	mu, _ := registryMutexes.LoadOrStore(registryPath, &sync.Mutex{})
+	mu.(*sync.Mutex).Lock()
+	defer mu.(*sync.Mutex).Unlock()
+
+	skills, err := loadRegistryWithPath(registryPath)
+	if err != nil {
+		return err
+	}
+
+	found := false
+	for i := range skills {
+		if skills[i].ID == skill.ID {
+			skills[i] = *skill
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("skill with ID '%s' not found", skill.ID)
+	}
+
+	return SaveRegistryWithPath(registryPath, skills)
 }

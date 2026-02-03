@@ -215,7 +215,7 @@ func (c *Client) Download(rawURL string) error {
 		StorePath: localPath,
 		UpdatedAt: time.Now(),
 	}
-	if err := addOrUpdateSkill(skillMetadata); err != nil {
+	if err := AddOrUpdateSkill(skillMetadata); err != nil {
 		c.logger.Error("Failed to update skills registry", err, "skill", skillName)
 		fmt.Printf("Warning: Failed to update skills registry: %v\n", err)
 		fmt.Println("The skill was downloaded successfully, but may not appear in 'gskills list'.")

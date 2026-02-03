@@ -15,6 +15,7 @@ const (
 	colName      = "Name"
 	colUpdatedAt = "Updated At"
 	colSourceURL = "Source URL"
+	colLinks     = "Links"
 	emptyMsg     = "No skills installed yet."
 	usageHint    = "Use 'gskills add <url>' to install a skill."
 )
@@ -55,11 +56,27 @@ func executeList() error {
 	}
 
 	table := tablewriter.NewTable(os.Stdout, tablewriter.WithConfig(cnf))
-	table.Header(colName, colUpdatedAt, colSourceURL)
+	table.Header(colName, colUpdatedAt, colSourceURL, colLinks)
 
 	for _, skill := range skills {
 		updatedAt := skill.UpdatedAt.Format(dateFormat)
-		table.Append(skill.Name, updatedAt, skill.SourceURL)
+
+		var linksInfo string
+		if skill.LinkedProjects != nil && len(skill.LinkedProjects) > 0 {
+			count := len(skill.LinkedProjects)
+			if count == 1 {
+				for path := range skill.LinkedProjects {
+					linksInfo = fmt.Sprintf("→ %s", path)
+					break
+				}
+			} else {
+				linksInfo = fmt.Sprintf("→ %d projects", count)
+			}
+		} else {
+			linksInfo = "-"
+		}
+
+		table.Append(skill.Name, updatedAt, skill.SourceURL, linksInfo)
 	}
 
 	if err := table.Render(); err != nil {
