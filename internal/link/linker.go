@@ -9,12 +9,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/smy-101/gskills/internal/constants"
 	"github.com/smy-101/gskills/internal/registry"
 	"github.com/smy-101/gskills/internal/types"
-)
-
-const (
-	opencodeSkillsDir = ".opencode/skills"
 )
 
 // Linker handles creating and managing symlinks between gskills-managed
@@ -93,7 +90,7 @@ func (l *Linker) LinkSkill(ctx context.Context, skillName, projectPath string) e
 	default:
 	}
 
-	targetDir := filepath.Join(absProjectPath, opencodeSkillsDir)
+	targetDir := filepath.Join(absProjectPath, constants.OpencodeSkillsDir)
 	targetPath := filepath.Join(targetDir, skillName)
 
 	exists, err := l.checkPathExists(targetPath)
