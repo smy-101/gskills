@@ -62,7 +62,7 @@ func executeList() error {
 		updatedAt := skill.UpdatedAt.Format(dateFormat)
 
 		var linksInfo string
-		if skill.LinkedProjects != nil && len(skill.LinkedProjects) > 0 {
+		if len(skill.LinkedProjects) > 0 {
 			count := len(skill.LinkedProjects)
 			if count == 1 {
 				for path := range skill.LinkedProjects {

@@ -278,7 +278,7 @@ func TestExecuteUnlink_DefaultToCurrentDirectory(t *testing.T) {
 		t.Fatalf("failed to find skill: %v", err)
 	}
 
-	if skill.LinkedProjects != nil && len(skill.LinkedProjects) > 0 {
+	if len(skill.LinkedProjects) > 0 {
 		t.Error("project was not removed from LinkedProjects")
 	}
 }

@@ -47,7 +47,7 @@ func RemoveSkillByName(name string) error {
 
 	var confirmed bool
 
-	if skill.LinkedProjects != nil && len(skill.LinkedProjects) > 0 {
+	if len(skill.LinkedProjects) > 0 {
 		fmt.Printf("Warning: Skill '%s' is linked to %d project(s):\n", name, len(skill.LinkedProjects))
 		for projectPath, linkInfo := range skill.LinkedProjects {
 			fmt.Printf("  • %s (linked at %s)\n", projectPath, linkInfo.LinkedAt.Format("2006-01-02 15:04"))
