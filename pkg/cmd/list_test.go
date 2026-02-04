@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smy-101/gskills/internal/add"
+	"github.com/smy-101/gskills/internal/registry"
 	"github.com/smy-101/gskills/internal/types"
 )
 
@@ -20,7 +20,7 @@ func createTestRegistry(t *testing.T, skills []types.SkillMetadata) string {
 	tmpDir := t.TempDir()
 	registryPath := filepath.Join(tmpDir, "skills.json")
 
-	if err := add.SaveRegistryWithPath(registryPath, skills); err != nil {
+	if err := registry.SaveRegistryWithPath(registryPath, skills); err != nil {
 		t.Fatalf("failed to write test registry: %v", err)
 	}
 	return registryPath

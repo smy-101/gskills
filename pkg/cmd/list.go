@@ -6,7 +6,7 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/olekukonko/tablewriter/tw"
-	"github.com/smy-101/gskills/internal/add"
+	"github.com/smy-101/gskills/internal/registry"
 	"github.com/spf13/cobra"
 )
 
@@ -35,7 +35,7 @@ var listCmd = &cobra.Command{
 
 // executeList loads the registry and displays a table of all installed skills.
 func executeList() error {
-	skills, err := add.LoadRegistry()
+	skills, err := registry.LoadRegistry()
 	if err != nil {
 		return fmt.Errorf("failed to load registry: %w", err)
 	}

@@ -2,6 +2,7 @@ package add
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,197 +13,233 @@ import (
 	"testing"
 	"time"
 
+	"github.com/smy-101/gskills/internal/registry"
 	"github.com/smy-101/gskills/internal/types"
 )
 
-func TestParseGitHubURL(t *testing.T) {
-	tests := []struct {
-		name    string
-		rawURL  string
-		want    *GitHubRepoInfo
-		wantErr bool
-		errMsg  string
-	}{
-		{
-			name:   "valid URL with branch and path",
-			rawURL: "https://github.com/owner/repo/tree/main/path/to/skill",
-			want: &GitHubRepoInfo{
-				Owner:  "owner",
-				Repo:   "repo",
-				Branch: "main",
-				Path:   "path/to/skill",
-			},
-			wantErr: false,
-		},
-		{
-			name:   "valid URL with branch and single path",
-			rawURL: "https://github.com/owner/repo/tree/develop/skill",
-			want: &GitHubRepoInfo{
-				Owner:  "owner",
-				Repo:   "repo",
-				Branch: "develop",
-				Path:   "skill",
-			},
-			wantErr: false,
-		},
-		{
-			name:    "invalid URL - missing branch",
-			rawURL:  "https://github.com/owner/repo/path",
-			wantErr: true,
-			errMsg:  "branch must be specified",
-		},
-		{
-			name:    "invalid URL - non-github host",
-			rawURL:  "https://gitlab.com/owner/repo/tree/main/path",
-			wantErr: true,
-			errMsg:  "only GitHub URLs are supported",
-		},
-		{
-			name:    "invalid URL format",
-			rawURL:  "not-a-url",
-			wantErr: true,
-			errMsg:  "only GitHub URLs",
-		},
-		{
-			name:    "invalid URL - missing path",
-			rawURL:  "https://github.com/owner/repo/tree/main",
-			wantErr: true,
-			errMsg:  "path must be specified",
-		},
-		{
-			name:    "invalid URL - empty owner",
-			rawURL:  "https://github.com//repo/tree/main/path",
-			wantErr: true,
-			errMsg:  "branch must be specified",
-		},
-		{
-			name:    "invalid URL - empty repo",
-			rawURL:  "https://github.com/owner//tree/main/path",
-			wantErr: true,
-			errMsg:  "repo cannot be empty",
-		},
-		{
-			name:    "invalid URL - empty branch",
-			rawURL:  "https://github.com/owner/repo/tree//path",
-			wantErr: true,
-			errMsg:  "branch cannot be empty",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseGitHubURL(tt.rawURL)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("parseGitHubURL() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if tt.wantErr {
-				if err == nil {
-					t.Errorf("parseGitHubURL() expected error containing %q, got nil", tt.errMsg)
-				} else if !strings.Contains(err.Error(), tt.errMsg) {
-					t.Errorf("parseGitHubURL() error = %v, expected to contain %q", err, tt.errMsg)
-				}
-				return
-			}
-			if got == nil {
-				t.Errorf("parseGitHubURL() got nil, want %+v", tt.want)
-				return
-			}
-			if got.Owner != tt.want.Owner {
-				t.Errorf("parseGitHubURL().Owner = %v, want %v", got.Owner, tt.want.Owner)
-			}
-			if got.Repo != tt.want.Repo {
-				t.Errorf("parseGitHubURL().Repo = %v, want %v", got.Repo, tt.want.Repo)
-			}
-			if got.Branch != tt.want.Branch {
-				t.Errorf("parseGitHubURL().Branch = %v, want %v", got.Branch, tt.want.Branch)
-			}
-			if got.Path != tt.want.Path {
-				t.Errorf("parseGitHubURL().Path = %v, want %v", got.Path, tt.want.Path)
-			}
-		})
-	}
+type LogCall struct {
+	Msg    string
+	Fields []interface{}
 }
 
-func TestCheckPathExists(t *testing.T) {
-	tmpDir := t.TempDir()
+type MockLogger struct {
+	mu         sync.Mutex
+	DebugCalls []LogCall
+	InfoCalls  []LogCall
+	WarnCalls  []LogCall
+	ErrorCalls []LogCall
+}
 
-	existingDir := filepath.Join(tmpDir, "existing")
-	if err := os.Mkdir(existingDir, 0755); err != nil {
-		t.Fatalf("failed to create test directory: %v", err)
+func (m *MockLogger) Debug(msg string, fields ...interface{}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.DebugCalls = append(m.DebugCalls, LogCall{Msg: msg, Fields: fields})
+}
+
+func (m *MockLogger) Info(msg string, fields ...interface{}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.InfoCalls = append(m.InfoCalls, LogCall{Msg: msg, Fields: fields})
+}
+
+func (m *MockLogger) Warn(msg string, fields ...interface{}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.WarnCalls = append(m.WarnCalls, LogCall{Msg: msg, Fields: fields})
+}
+
+func (m *MockLogger) Error(msg string, err error, fields ...interface{}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.ErrorCalls = append(m.ErrorCalls, LogCall{Msg: msg, Fields: append(fields, "error", err)})
+}
+
+func (m *MockLogger) HasDebugCall(msg string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, call := range m.DebugCalls {
+		if call.Msg == msg {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *MockLogger) HasInfoCall(msg string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, call := range m.InfoCalls {
+		if call.Msg == msg {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *MockLogger) HasWarnCall(msg string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, call := range m.WarnCalls {
+		if call.Msg == msg {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *MockLogger) HasErrorCall(msg string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, call := range m.ErrorCalls {
+		if call.Msg == msg {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *MockLogger) Reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.DebugCalls = nil
+	m.InfoCalls = nil
+	m.WarnCalls = nil
+	m.ErrorCalls = nil
+}
+
+type TestServer struct {
+	Server   *httptest.Server
+	Handlers map[string]http.HandlerFunc
+	mu       sync.Mutex
+	CallLog  []string
+}
+
+func NewTestServer() *TestServer {
+	ts := &TestServer{
+		Handlers: make(map[string]http.HandlerFunc),
+		CallLog:  make([]string, 0),
 	}
 
-	existingFile := filepath.Join(tmpDir, "file.txt")
-	if err := os.WriteFile(existingFile, []byte("test"), 0644); err != nil {
-		t.Fatalf("failed to create test file: %v", err)
+	ts.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ts.mu.Lock()
+		ts.CallLog = append(ts.CallLog, r.URL.Path)
+		ts.mu.Unlock()
+
+		handler := ts.Handlers[r.URL.Path]
+		if handler == nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		handler(w, r)
+	}))
+
+	return ts
+}
+
+func (ts *TestServer) Close() {
+	ts.Server.Close()
+}
+
+func (ts *TestServer) SetHandler(path string, handler http.HandlerFunc) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	ts.Handlers[path] = handler
+}
+
+func (ts *TestServer) GetCallCount(path string) int {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	count := 0
+	for _, p := range ts.CallLog {
+		if p == path {
+			count++
+		}
+	}
+	return count
+}
+
+func (ts *TestServer) URL() string {
+	return ts.Server.URL
+}
+
+func setupTestEnv(t *testing.T) (homeDir string, cleanup func()) {
+	t.Helper()
+	homeDir = t.TempDir()
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+
+	gskillsDir := filepath.Join(homeDir, ".gskills", "skills")
+	if err := os.MkdirAll(gskillsDir, 0755); err != nil {
+		t.Fatalf("failed to create .gskills/skills directory: %v", err)
 	}
 
-	tests := []struct {
-		name      string
-		path      string
-		wantExist bool
-		wantErr   bool
-	}{
-		{
-			name:      "existing directory",
-			path:      existingDir,
-			wantExist: true,
-			wantErr:   false,
-		},
-		{
-			name:      "existing file",
-			path:      existingFile,
-			wantExist: true,
-			wantErr:   false,
-		},
-		{
-			name:      "non-existent path",
-			path:      filepath.Join(tmpDir, "nonexistent"),
-			wantExist: false,
-			wantErr:   false,
-		},
+	registryDir := filepath.Join(homeDir, ".gskills")
+	if err := os.MkdirAll(registryDir, 0755); err != nil {
+		t.Fatalf("failed to create .gskills directory: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := checkPathExists(tt.path)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("checkPathExists() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.wantExist {
-				t.Errorf("checkPathExists() = %v, want %v", got, tt.wantExist)
-			}
-		})
+	cleanup = func() {
+		if oldHome != "" {
+			os.Setenv("HOME", oldHome)
+		} else {
+			os.Unsetenv("HOME")
+		}
 	}
+
+	return homeDir, cleanup
 }
 
 func TestNewClient(t *testing.T) {
 	tests := []struct {
-		name  string
-		token string
+		name          string
+		token         string
+		wantToken     bool
+		wantBaseURL   string
+		wantUserAgent string
 	}{
 		{
-			name:  "client with token",
-			token: "test-token-123",
+			name:          "client without token",
+			token:         "",
+			wantToken:     false,
+			wantBaseURL:   "https://api.github.com",
+			wantUserAgent: "gskills-cli/1.0",
 		},
 		{
-			name:  "client without token",
-			token: "",
+			name:          "client with token",
+			token:         "test-token",
+			wantToken:     true,
+			wantBaseURL:   "https://api.github.com",
+			wantUserAgent: "gskills-cli/1.0",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client := NewClient(tt.token)
-			if client == nil {
-				t.Fatal("NewClient() returned nil")
-			}
-			if client.restyClient == nil {
-				t.Error("NewClient() restyClient is nil")
-			}
+
 			if client.token != tt.token {
 				t.Errorf("NewClient() token = %v, want %v", client.token, tt.token)
+			}
+
+			if client.baseURL != tt.wantBaseURL {
+				t.Errorf("NewClient() baseURL = %v, want %v", client.baseURL, tt.wantBaseURL)
+			}
+
+			if client.restyClient == nil {
+				t.Fatal("NewClient() restyClient is nil")
+			}
+
+			userAgent := client.restyClient.Header.Get("User-Agent")
+			if userAgent != tt.wantUserAgent {
+				t.Errorf("NewClient() User-Agent = %v, want %v", userAgent, tt.wantUserAgent)
+			}
+
+			if tt.wantToken {
+				authHeader := client.restyClient.Header.Get("Authorization")
+				expectedAuth := fmt.Sprintf("Bearer %s", tt.token)
+				if authHeader != expectedAuth {
+					t.Errorf("NewClient() Authorization = %v, want %v", authHeader, expectedAuth)
+				}
 			}
 		})
 	}
@@ -211,29 +248,29 @@ func TestNewClient(t *testing.T) {
 func TestCheckSKILLExists(t *testing.T) {
 	tests := []struct {
 		name       string
-		mockStatus int
-		mockBody   string
+		statusCode int
+		response   string
 		wantExists bool
 		wantErr    bool
 	}{
 		{
 			name:       "SKILL.md exists",
-			mockStatus: 200,
-			mockBody:   `{"name":"SKILL.md","type":"file","path":"SKILL.md"}`,
+			statusCode: http.StatusOK,
+			response:   `{"name":"SKILL.md","path":"SKILL.md","type":"file"}`,
 			wantExists: true,
 			wantErr:    false,
 		},
 		{
-			name:       "SKILL.md does not exist",
-			mockStatus: 404,
-			mockBody:   `{"message":"Not Found"}`,
+			name:       "SKILL.md not found",
+			statusCode: http.StatusNotFound,
+			response:   `{"message":"Not Found"}`,
 			wantExists: false,
 			wantErr:    false,
 		},
 		{
 			name:       "API error",
-			mockStatus: 500,
-			mockBody:   `{"message":"Internal Server Error"}`,
+			statusCode: http.StatusInternalServerError,
+			response:   `{"message":"Internal Server Error"}`,
 			wantExists: false,
 			wantErr:    true,
 		},
@@ -241,984 +278,650 @@ func TestCheckSKILLExists(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(tt.mockStatus)
-				w.Write([]byte(tt.mockBody))
-			}))
-			defer server.Close()
+			ts := NewTestServer()
+			defer ts.Close()
+
+			path := "/repos/owner/repo/contents/skills/test/SKILL.md"
+			ts.SetHandler(path, func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tt.statusCode)
+				w.Write([]byte(tt.response))
+			})
 
 			client := NewClient("")
-			client.baseURL = server.URL
+			client.baseURL = ts.URL()
 
 			repoInfo := &GitHubRepoInfo{
-				Owner:  "test-owner",
-				Repo:   "test-repo",
+				Owner:  "owner",
+				Repo:   "repo",
 				Branch: "main",
-				Path:   "skill",
+				Path:   "skills/test",
 			}
 
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
+			ctx := context.Background()
+			exists, err := client.checkSKILLExists(ctx, repoInfo)
 
-			got, err := client.checkSKILLExists(ctx, repoInfo)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("checkSKILLExists() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if got != tt.wantExists {
-				t.Errorf("checkSKILLExists() = %v, want %v", got, tt.wantExists)
+
+			if exists != tt.wantExists {
+				t.Errorf("checkSKILLExists() = %v, want %v", exists, tt.wantExists)
+			}
+
+			if ts.GetCallCount(path) != 1 {
+				t.Errorf("checkSKILLExists() called test server %d times, want 1", ts.GetCallCount(path))
+			}
+		})
+	}
+}
+
+func TestDownloadFile(t *testing.T) {
+	tests := []struct {
+		name       string
+		statusCode int
+		response   []byte
+		wantErr    bool
+	}{
+		{
+			name:       "successful download",
+			statusCode: http.StatusOK,
+			response:   []byte("file content"),
+			wantErr:    false,
+		},
+		{
+			name:       "rate limit with retry",
+			statusCode: http.StatusForbidden,
+			response:   []byte(`{"message":"API rate limit exceeded"}`),
+			wantErr:    true,
+		},
+		{
+			name:       "not found",
+			statusCode: http.StatusNotFound,
+			response:   []byte(`{"message":"Not Found"}`),
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ts := NewTestServer()
+			defer ts.Close()
+
+			callCount := 0
+			ts.SetHandler("/download", func(w http.ResponseWriter, r *http.Request) {
+				callCount++
+				if callCount == 1 && tt.statusCode == http.StatusForbidden {
+					w.WriteHeader(http.StatusForbidden)
+					w.Write(tt.response)
+					return
+				}
+				w.WriteHeader(tt.statusCode)
+				w.Write(tt.response)
+			})
+
+			client := NewClient("")
+			client.baseURL = ts.URL()
+			client.logger = &MockLogger{}
+
+			ctx := context.Background()
+			data, err := client.downloadFile(ctx, ts.URL()+"/download")
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("downloadFile() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if !tt.wantErr && string(data) != string(tt.response) {
+				t.Errorf("downloadFile() = %v, want %v", string(data), string(tt.response))
 			}
 		})
 	}
 }
 
 func TestGetGitHubContents(t *testing.T) {
-	mockContents := []types.GitHubContent{
+	tests := []struct {
+		name       string
+		statusCode int
+		response   string
+		wantErr    bool
+		validate   func(*testing.T, []types.GitHubContent)
+	}{
 		{
-			Type:        "file",
-			Name:        "file1.txt",
-			Path:        "file1.txt",
-			DownloadURL: "https://example.com/file1.txt",
+			name:       "successful directory listing",
+			statusCode: http.StatusOK,
+			response: `[
+				{"type":"file","name":"test.txt","path":"test.txt","sha":"abc123","size":100,"url":"https://api.github.com/...","html_url":"https://github.com/...","download_url":"https://raw.githubusercontent.com/..."},
+				{"type":"dir","name":"subdir","path":"subdir","sha":"def456","size":0,"url":"https://api.github.com/...","html_url":"https://github.com/...","download_url":""}
+			]`,
+			wantErr: false,
+			validate: func(t *testing.T, contents []types.GitHubContent) {
+				if len(contents) != 2 {
+					t.Errorf("got %d items, want 2", len(contents))
+				}
+				if contents[0].Name != "test.txt" {
+					t.Errorf("first item name = %s, want test.txt", contents[0].Name)
+				}
+				if contents[1].Name != "subdir" {
+					t.Errorf("second item name = %s, want subdir", contents[1].Name)
+				}
+			},
 		},
 		{
-			Type: "dir",
-			Name: "subdir",
-			Path: "subdir",
+			name:       "not found",
+			statusCode: http.StatusNotFound,
+			response:   `{"message":"Not Found"}`,
+			wantErr:    true,
+		},
+		{
+			name:       "invalid JSON",
+			statusCode: http.StatusOK,
+			response:   `invalid json`,
+			wantErr:    true,
 		},
 	}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(200)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ts := NewTestServer()
+			defer ts.Close()
 
-		contentsJSON := `[
-			{"type":"file","name":"file1.txt","path":"file1.txt","download_url":"https://example.com/file1.txt"},
-			{"type":"dir","name":"subdir","path":"subdir"}
-		]`
-		w.Write([]byte(contentsJSON))
-	}))
-	defer server.Close()
+			path := "/repos/owner/repo/contents/test"
+			ts.SetHandler(path, func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tt.statusCode)
+				w.Write([]byte(tt.response))
+			})
 
-	client := NewClient("")
-	client.baseURL = server.URL
+			client := NewClient("")
+			client.baseURL = ts.URL()
 
-	repoInfo := &GitHubRepoInfo{
-		Owner:  "test-owner",
-		Repo:   "test-repo",
-		Branch: "main",
-		Path:   "skill",
-	}
+			repoInfo := &GitHubRepoInfo{
+				Owner:  "owner",
+				Repo:   "repo",
+				Branch: "main",
+				Path:   "test",
+			}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+			ctx := context.Background()
+			contents, err := client.getGitHubContents(ctx, repoInfo, "test")
 
-	got, err := client.getGitHubContents(ctx, repoInfo, "skill")
-	if err != nil {
-		t.Fatalf("getGitHubContents() error = %v", err)
-	}
+			if (err != nil) != tt.wantErr {
+				t.Errorf("getGitHubContents() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
 
-	if len(got) != len(mockContents) {
-		t.Errorf("getGitHubContents() returned %d items, want %d", len(got), len(mockContents))
-	}
-
-	for i, item := range got {
-		if item.Type != mockContents[i].Type {
-			t.Errorf("getGitHubContents()[%d].Type = %v, want %v", i, item.Type, mockContents[i].Type)
-		}
-		if item.Name != mockContents[i].Name {
-			t.Errorf("getGitHubContents()[%d].Name = %v, want %v", i, item.Name, mockContents[i].Name)
-		}
-	}
-}
-
-func TestDownloadFile(t *testing.T) {
-	testData := "test file content"
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
-		w.Write([]byte(testData))
-	}))
-	defer server.Close()
-
-	client := NewClient("")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	got, err := client.downloadFile(ctx, server.URL)
-	if err != nil {
-		t.Fatalf("downloadFile() error = %v", err)
-	}
-
-	if string(got) != testData {
-		t.Errorf("downloadFile() = %v, want %v", string(got), testData)
-	}
-}
-
-func TestDownloadFileError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(404)
-	}))
-	defer server.Close()
-
-	client := NewClient("")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	_, err := client.downloadFile(ctx, server.URL)
-	if err == nil {
-		t.Error("downloadFile() expected error, got nil")
+			if !tt.wantErr && tt.validate != nil {
+				tt.validate(t, contents)
+			}
+		})
 	}
 }
 
 func TestDownloadRecursive(t *testing.T) {
-	var server *httptest.Server
+	t.Run("successful directory download", func(t *testing.T) {
+		ts := NewTestServer()
+		defer ts.Close()
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		ts.SetHandler("/repos/owner/repo/contents/skill", func(w http.ResponseWriter, r *http.Request) {
+			contents := []types.GitHubContent{
+				{
+					Type:        "file",
+					Name:        "file1.txt",
+					Path:        "skill/file1.txt",
+					SHA:         "abc123",
+					Size:        10,
+					DownloadURL: ts.URL() + "/file1",
+				},
+				{
+					Type:        "dir",
+					Name:        "subdir",
+					Path:        "skill/subdir",
+					SHA:         "def456",
+					DownloadURL: "",
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(contents)
+		})
 
-		if strings.Contains(r.URL.Path, "SKILL.md") {
-			w.WriteHeader(200)
-			w.Write([]byte(`{"name":"SKILL.md","type":"file","path":"SKILL.md","download_url":"` + server.URL + `/skill/SKILL.md"}`))
-			return
+		ts.SetHandler("/repos/owner/repo/contents/skill/subdir", func(w http.ResponseWriter, r *http.Request) {
+			contents := []types.GitHubContent{
+				{
+					Type:        "file",
+					Name:        "file2.txt",
+					Path:        "skill/subdir/file2.txt",
+					SHA:         "ghi789",
+					Size:        15,
+					DownloadURL: ts.URL() + "/file2",
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(contents)
+		})
+
+		ts.SetHandler("/file1", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("content1"))
+		})
+
+		ts.SetHandler("/file2", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("content2"))
+		})
+
+		client := NewClient("")
+		client.baseURL = ts.URL()
+		mockLogger := &MockLogger{}
+		client.logger = mockLogger
+
+		repoInfo := &GitHubRepoInfo{
+			Owner:  "owner",
+			Repo:   "repo",
+			Branch: "main",
+			Path:   "skill",
 		}
 
-		if r.URL.Path == "/repos/test-owner/test-repo/contents/skill" {
-			w.WriteHeader(200)
-			contentsJSON := `[
-				{"type":"file","name":"file1.txt","path":"file1.txt","download_url":"` + server.URL + `/skill/file1.txt"},
-				{"type":"file","name":"SKILL.md","path":"SKILL.md","download_url":"` + server.URL + `/skill/SKILL.md"},
-				{"type":"dir","name":"subdir","path":"subdir"}
-			]`
-			w.Write([]byte(contentsJSON))
-			return
+		tmpDir := t.TempDir()
+		ctx := context.Background()
+
+		stats, err := client.downloadRecursive(ctx, repoInfo, tmpDir, "skill")
+
+		if err != nil {
+			t.Fatalf("downloadRecursive() error = %v", err)
 		}
 
-		if strings.Contains(r.URL.Path, "subdir") {
-			w.WriteHeader(200)
-			contentsJSON := `[
-				{"type":"file","name":"file2.txt","path":"subdir/file2.txt","download_url":"` + server.URL + `/skill/subdir/file2.txt"}
-			]`
-			w.Write([]byte(contentsJSON))
-			return
+		if stats.FilesDownloaded != 2 {
+			t.Errorf("FilesDownloaded = %d, want 2", stats.FilesDownloaded)
 		}
 
-		if strings.HasSuffix(r.URL.Path, "file1.txt") || strings.HasSuffix(r.URL.Path, "file2.txt") || strings.HasSuffix(r.URL.Path, "SKILL.md") {
-			w.WriteHeader(200)
-			w.Write([]byte(fmt.Sprintf("content of %s", r.URL.Path)))
-			return
+		if stats.DirsCreated != 1 {
+			t.Errorf("DirsCreated = %d, want 1", stats.DirsCreated)
 		}
 
-		w.WriteHeader(404)
+		if stats.BytesDownloaded != 16 {
+			t.Errorf("BytesDownloaded = %d, want 16", stats.BytesDownloaded)
+		}
+
+		file1Path := filepath.Join(tmpDir, "file1.txt")
+		content1, err := os.ReadFile(file1Path)
+		if err != nil {
+			t.Fatalf("failed to read file1.txt: %v", err)
+		}
+		if string(content1) != "content1" {
+			t.Errorf("file1.txt content = %s, want 'content1'", string(content1))
+		}
+
+		file2Path := filepath.Join(tmpDir, "subdir", "file2.txt")
+		content2, err := os.ReadFile(file2Path)
+		if err != nil {
+			t.Fatalf("failed to read file2.txt: %v", err)
+		}
+		if string(content2) != "content2" {
+			t.Errorf("file2.txt content = %s, want 'content2'", string(content2))
+		}
 	})
 
-	server = httptest.NewServer(handler)
-	defer server.Close()
+	t.Run("handles context cancellation", func(t *testing.T) {
+		ts := NewTestServer()
+		defer ts.Close()
 
-	tmpDir := t.TempDir()
+		requestCount := 0
+		ts.SetHandler("/repos/owner/repo/contents/skill", func(w http.ResponseWriter, r *http.Request) {
+			requestCount++
+			contents := []types.GitHubContent{
+				{
+					Type:        "file",
+					Name:        "file.txt",
+					Path:        "skill/file.txt",
+					SHA:         "abc123",
+					Size:        10,
+					DownloadURL: ts.URL() + "/file",
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(contents)
+		})
+
+		client := NewClient("")
+		client.baseURL = ts.URL()
+
+		repoInfo := &GitHubRepoInfo{
+			Owner:  "owner",
+			Repo:   "repo",
+			Branch: "main",
+			Path:   "skill",
+		}
+
+		tmpDir := t.TempDir()
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+		defer cancel()
+
+		_, err := client.downloadRecursive(ctx, repoInfo, tmpDir, "skill")
+
+		if err == nil {
+			t.Error("downloadRecursive() expected error on timeout, got nil")
+		}
+	})
+}
+
+func TestDownload(t *testing.T) {
+	_, cleanup := setupTestEnv(t)
+	defer cleanup()
+
+	tests := []struct {
+		name                string
+		url                 string
+		setupServer         func(*TestServer)
+		mockPromptOverwrite func() (bool, error)
+		wantErr             bool
+		validate            func(*testing.T, string)
+		errorType           ErrorType
+	}{
+		{
+			name: "successful download",
+			url:  "https://github.com/owner/repo/tree/main/skill",
+			setupServer: func(ts *TestServer) {
+				ts.SetHandler("/repos/owner/repo/contents/skill/SKILL.md", func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusOK)
+					json.NewEncoder(w).Encode(map[string]interface{}{
+						"name": "SKILL.md",
+						"type": "file",
+					})
+				})
+
+				ts.SetHandler("/repos/owner/repo/contents/skill", func(w http.ResponseWriter, r *http.Request) {
+					contents := []types.GitHubContent{
+						{
+							Type:        "file",
+							Name:        "SKILL.md",
+							Path:        "skill/SKILL.md",
+							SHA:         "abc123",
+							Size:        50,
+							DownloadURL: ts.URL() + "/skillmd",
+						},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(contents)
+				})
+
+				ts.SetHandler("/skillmd", func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("# Test Skill"))
+				})
+			},
+			wantErr: false,
+			validate: func(t *testing.T, homeDir string) {
+				skillPath := filepath.Join(homeDir, ".gskills", "skills", "skill")
+				if _, err := os.Stat(skillPath); os.IsNotExist(err) {
+					t.Errorf("skill directory not created at %s", skillPath)
+				}
+
+				skillMDPath := filepath.Join(skillPath, "SKILL.md")
+				content, err := os.ReadFile(skillMDPath)
+				if err != nil {
+					t.Fatalf("failed to read SKILL.md: %v", err)
+				}
+				if string(content) != "# Test Skill" {
+					t.Errorf("SKILL.md content = %s, want '# Test Skill'", string(content))
+				}
+
+				skills, err := registry.LoadRegistry()
+				if err != nil {
+					t.Fatalf("failed to load registry: %v", err)
+				}
+
+				found := false
+				for _, s := range skills {
+					if s.ID == "skill@main" {
+						found = true
+						if s.Name != "skill" {
+							t.Errorf("skill name = %s, want 'skill'", s.Name)
+						}
+						break
+					}
+				}
+				if !found {
+					t.Error("skill not found in registry")
+				}
+			},
+		},
+		{
+			name:        "invalid URL format",
+			url:         "not-a-url",
+			setupServer: func(ts *TestServer) {},
+			wantErr:     true,
+			errorType:   ErrorTypeInvalidURL,
+		},
+		{
+			name: "SKILL.md not found",
+			url:  "https://github.com/owner/repo/tree/main/noskill",
+			setupServer: func(ts *TestServer) {
+				ts.SetHandler("/repos/owner/repo/contents/noskill/SKILL.md", func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusNotFound)
+				})
+			},
+			wantErr:   true,
+			errorType: ErrorTypeValidation,
+		},
+		{
+			name: "directory already exists - overwrite",
+			url:  "https://github.com/owner/repo/tree/main/skill2",
+			setupServer: func(ts *TestServer) {
+				homeDir, _ := os.UserHomeDir()
+				skillPath := filepath.Join(homeDir, ".gskills", "skills", "skill2")
+				os.MkdirAll(skillPath, 0755)
+
+				ts.SetHandler("/repos/owner/repo/contents/skill2/SKILL.md", func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusOK)
+					json.NewEncoder(w).Encode(map[string]interface{}{
+						"name": "SKILL.md",
+						"type": "file",
+					})
+				})
+
+				ts.SetHandler("/repos/owner/repo/contents/skill2", func(w http.ResponseWriter, r *http.Request) {
+					contents := []types.GitHubContent{
+						{
+							Type:        "file",
+							Name:        "file.txt",
+							Path:        "skill2/file.txt",
+							SHA:         "abc123",
+							Size:        10,
+							DownloadURL: ts.URL() + "/file",
+						},
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(contents)
+				})
+
+				ts.SetHandler("/file", func(w http.ResponseWriter, r *http.Request) {
+					w.Write([]byte("test"))
+				})
+			},
+			mockPromptOverwrite: func() (bool, error) { return true, nil },
+			wantErr:             false,
+			validate: func(t *testing.T, homeDir string) {
+				skillPath := filepath.Join(homeDir, ".gskills", "skills", "skill2")
+				if _, err := os.Stat(skillPath); os.IsNotExist(err) {
+					t.Errorf("skill directory not found at %s", skillPath)
+				}
+			},
+		},
+		{
+			name: "directory already exists - cancel",
+			url:  "https://github.com/owner/repo/tree/main/skill3",
+			setupServer: func(ts *TestServer) {
+				homeDir, _ := os.UserHomeDir()
+				skillPath := filepath.Join(homeDir, ".gskills", "skills", "skill3")
+				os.MkdirAll(skillPath, 0755)
+
+				ts.SetHandler("/repos/owner/repo/contents/skill3/SKILL.md", func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusOK)
+					json.NewEncoder(w).Encode(map[string]interface{}{
+						"name": "SKILL.md",
+						"type": "file",
+					})
+				})
+			},
+			mockPromptOverwrite: func() (bool, error) { return false, nil },
+			wantErr:             false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ts := NewTestServer()
+			defer ts.Close()
+
+			tt.setupServer(ts)
+
+			client := NewClient("")
+			client.baseURL = ts.URL()
+
+			if tt.mockPromptOverwrite != nil {
+				oldPromptOverwrite := promptOverwrite
+				promptOverwrite = tt.mockPromptOverwrite
+				defer func() { promptOverwrite = oldPromptOverwrite }()
+			}
+
+			homeDir, _ := os.UserHomeDir()
+
+			err := client.Download(tt.url)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Download() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if tt.wantErr && tt.errorType != 0 {
+				var downloadErr *DownloadError
+				if !err.(*DownloadError).Is(&DownloadError{Type: tt.errorType}) {
+					t.Errorf("Download() error type = %v, want %v", err, tt.errorType)
+				}
+				_ = downloadErr
+			}
+
+			if !tt.wantErr && tt.validate != nil {
+				tt.validate(t, homeDir)
+			}
+		})
+	}
+}
+
+func TestDownloadRecursive_Race(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping race test in short mode")
+	}
+
+	ts := NewTestServer()
+	defer ts.Close()
+
+	ts.SetHandler("/repos/owner/repo/contents/skill", func(w http.ResponseWriter, r *http.Request) {
+		contents := make([]types.GitHubContent, 10)
+		for i := 0; i < 10; i++ {
+			contents[i] = types.GitHubContent{
+				Type:        "file",
+				Name:        fmt.Sprintf("file%d.txt", i),
+				Path:        fmt.Sprintf("skill/file%d.txt", i),
+				SHA:         fmt.Sprintf("sha%d", i),
+				Size:        100,
+				DownloadURL: ts.URL() + fmt.Sprintf("/file%d", i),
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(contents)
+	})
+
+	for i := 0; i < 10; i++ {
+		ts.SetHandler(fmt.Sprintf("/file%d", i), func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(strings.Repeat("x", 100)))
+		})
+	}
 
 	client := NewClient("")
-	client.baseURL = server.URL
+	client.baseURL = ts.URL()
 
 	repoInfo := &GitHubRepoInfo{
-		Owner:  "test-owner",
-		Repo:   "test-repo",
+		Owner:  "owner",
+		Repo:   "repo",
 		Branch: "main",
 		Path:   "skill",
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	tmpDir := t.TempDir()
+	ctx := context.Background()
 
 	stats, err := client.downloadRecursive(ctx, repoInfo, tmpDir, "skill")
+
 	if err != nil {
 		t.Fatalf("downloadRecursive() error = %v", err)
 	}
 
-	if stats.FilesDownloaded != 3 {
-		t.Errorf("downloadRecursive() FilesDownloaded = %d, want 3", stats.FilesDownloaded)
+	if stats.FilesDownloaded != 10 {
+		t.Errorf("FilesDownloaded = %d, want 10", stats.FilesDownloaded)
 	}
 
-	if stats.DirsCreated != 1 {
-		t.Errorf("downloadRecursive() DirsCreated = %d, want 1", stats.DirsCreated)
-	}
-
-	if stats.BytesDownloaded == 0 {
-		t.Errorf("downloadRecursive() BytesDownloaded = 0, want > 0")
-	}
-
-	file1Path := filepath.Join(tmpDir, "file1.txt")
-	if _, err := os.Stat(file1Path); os.IsNotExist(err) {
-		t.Errorf("downloadRecursive() file1.txt was not downloaded")
-	}
-
-	skillMDPath := filepath.Join(tmpDir, "SKILL.md")
-	if _, err := os.Stat(skillMDPath); os.IsNotExist(err) {
-		t.Errorf("downloadRecursive() SKILL.md was not downloaded")
-	}
-
-	subdirPath := filepath.Join(tmpDir, "subdir", "file2.txt")
-	if _, err := os.Stat(subdirPath); os.IsNotExist(err) {
-		t.Errorf("downloadRecursive() subdir/file2.txt was not downloaded")
+	if stats.BytesDownloaded != 1000 {
+		t.Errorf("BytesDownloaded = %d, want 1000", stats.BytesDownloaded)
 	}
 }
 
-func BenchmarkParseGitHubURL(b *testing.B) {
-	rawURL := "https://github.com/owner/repo/tree/main/path/to/skill"
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = parseGitHubURL(rawURL)
-	}
-}
-
-func BenchmarkCheckPathExists(b *testing.B) {
-	tmpDir := b.TempDir()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = checkPathExists(tmpDir)
-	}
-}
-
-func TestGetRegistryPath(t *testing.T) {
-	tests := []struct {
-		name    string
-		wantErr bool
-	}{
-		{
-			name:    "get registry path",
-			wantErr: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := getRegistryPath()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("getRegistryPath() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !tt.wantErr {
-				if got == "" {
-					t.Error("getRegistryPath() returned empty path")
-				}
-				if !filepath.IsAbs(got) {
-					t.Errorf("getRegistryPath() returned relative path: %s", got)
-				}
-			}
-		})
-	}
-}
-
-func TestLoadRegistry(t *testing.T) {
+func TestIsRateLimitResponse(t *testing.T) {
 	tests := []struct {
 		name       string
-		setupFile  func(t *testing.T, registryPath string)
-		wantErr    bool
-		wantCount  int
-		wantSkills map[string]types.SkillMetadata
+		statusCode int
+		want       bool
 	}{
-		{
-			name: "file doesn't exist",
-			setupFile: func(t *testing.T, registryPath string) {
-			},
-			wantErr:   false,
-			wantCount: 0,
-		},
-		{
-			name: "file exists with valid data",
-			setupFile: func(t *testing.T, registryPath string) {
-				skills := []types.SkillMetadata{
-					{
-						ID:        "test-skill@main",
-						Name:      "test-skill",
-						Version:   "main",
-						SourceURL: "https://github.com/test/repo/tree/main/test-skill",
-						StorePath: "/home/test/.gskills/skills/test-skill",
-					},
-				}
-				if err := SaveRegistryWithPath(registryPath, skills); err != nil {
-					t.Fatalf("setup failed: %v", err)
-				}
-			},
-			wantErr:   false,
-			wantCount: 1,
-			wantSkills: map[string]types.SkillMetadata{
-				"test-skill@main": {
-					ID:        "test-skill@main",
-					Name:      "test-skill",
-					Version:   "main",
-					SourceURL: "https://github.com/test/repo/tree/main/test-skill",
-					StorePath: "/home/test/.gskills/skills/test-skill",
-				},
-			},
-		},
-		{
-			name: "file exists with multiple skills",
-			setupFile: func(t *testing.T, registryPath string) {
-				skills := []types.SkillMetadata{
-					{
-						ID:        "skill-a@main",
-						Name:      "skill-a",
-						Version:   "main",
-						SourceURL: "https://github.com/test/repo/tree/main/skill-a",
-						StorePath: "/home/test/.gskills/skills/skill-a",
-					},
-					{
-						ID:        "skill-b@v1.0.0",
-						Name:      "skill-b",
-						Version:   "v1.0.0",
-						SourceURL: "https://github.com/test/repo/tree/v1.0.0/skill-b",
-						StorePath: "/home/test/.gskills/skills/skill-b",
-					},
-				}
-				if err := SaveRegistryWithPath(registryPath, skills); err != nil {
-					t.Fatalf("setup failed: %v", err)
-				}
-			},
-			wantErr:   false,
-			wantCount: 2,
-		},
-		{
-			name: "file exists with malformed JSON",
-			setupFile: func(t *testing.T, registryPath string) {
-				registryDir := filepath.Dir(registryPath)
-				if err := os.MkdirAll(registryDir, 0755); err != nil {
-					t.Fatalf("setup failed: %v", err)
-				}
-				if err := os.WriteFile(registryPath, []byte("{invalid json"), 0644); err != nil {
-					t.Fatalf("setup failed: %v", err)
-				}
-			},
-			wantErr:   true,
-			wantCount: 0,
-		},
+		{"403 forbidden", http.StatusForbidden, true},
+		{"429 too many requests", 429, true},
+		{"200 OK", http.StatusOK, false},
+		{"404 not found", http.StatusNotFound, false},
+		{"500 internal server error", http.StatusInternalServerError, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			registryPath := filepath.Join(tmpDir, "skills.json")
-			tt.setupFile(t, registryPath)
-
-			skills, err := loadRegistryWithPath(registryPath)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("loadRegistryWithPath() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !tt.wantErr {
-				if len(skills) != tt.wantCount {
-					t.Errorf("loadRegistryWithPath() returned %d skills, want %d", len(skills), tt.wantCount)
-				}
-				for id, wantSkill := range tt.wantSkills {
-					found := false
-					for _, skill := range skills {
-						if skill.ID == id {
-							found = true
-							if skill.Name != wantSkill.Name {
-								t.Errorf("loadRegistryWithPath()[%s].Name = %v, want %v", id, skill.Name, wantSkill.Name)
-							}
-							if skill.Version != wantSkill.Version {
-								t.Errorf("loadRegistryWithPath()[%s].Version = %v, want %v", id, skill.Version, wantSkill.Version)
-							}
-							if skill.SourceURL != wantSkill.SourceURL {
-								t.Errorf("loadRegistryWithPath()[%s].SourceURL = %v, want %v", id, skill.SourceURL, wantSkill.SourceURL)
-							}
-							if skill.StorePath != wantSkill.StorePath {
-								t.Errorf("loadRegistryWithPath()[%s].StorePath = %v, want %v", id, skill.StorePath, wantSkill.StorePath)
-							}
-							break
-						}
-					}
-					if !found {
-						t.Errorf("loadRegistryWithPath() skill %s not found", id)
-					}
-				}
+			if got := isRateLimitResponse(tt.statusCode); got != tt.want {
+				t.Errorf("isRateLimitResponse() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestSaveRegistry(t *testing.T) {
+func TestIsRateLimitError(t *testing.T) {
 	tests := []struct {
-		name      string
-		skills    []types.SkillMetadata
-		wantErr   bool
-		setupFile func(t *testing.T, registryPath string)
+		name string
+		err  error
+		want bool
 	}{
-		{
-			name:    "save empty registry",
-			skills:  []types.SkillMetadata{},
-			wantErr: false,
-		},
-		{
-			name: "save single skill",
-			skills: []types.SkillMetadata{
-				{
-					ID:        "test-skill@main",
-					Name:      "test-skill",
-					Version:   "main",
-					SourceURL: "https://github.com/test/repo/tree/main/test-skill",
-					StorePath: "/home/test/.gskills/skills/test-skill",
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "save multiple skills",
-			skills: []types.SkillMetadata{
-				{
-					ID:        "skill-a@main",
-					Name:      "skill-a",
-					Version:   "main",
-					SourceURL: "https://github.com/test/repo/tree/main/skill-a",
-					StorePath: "/home/test/.gskills/skills/skill-a",
-				},
-				{
-					ID:        "skill-b@v1.0.0",
-					Name:      "skill-b",
-					Version:   "v1.0.0",
-					SourceURL: "https://github.com/test/repo/tree/v1.0.0/skill-b",
-					StorePath: "/home/test/.gskills/skills/skill-b",
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "overwrite existing file",
-			skills: []types.SkillMetadata{
-				{
-					ID:        "new-skill@main",
-					Name:      "new-skill",
-					Version:   "main",
-					SourceURL: "https://github.com/test/repo/tree/main/new-skill",
-					StorePath: "/home/test/.gskills/skills/new-skill",
-				},
-			},
-			wantErr: false,
-			setupFile: func(t *testing.T, registryPath string) {
-				existingSkills := []types.SkillMetadata{
-					{
-						ID:        "old-skill@main",
-						Name:      "old-skill",
-						Version:   "main",
-						SourceURL: "https://github.com/test/repo/tree/main/old-skill",
-						StorePath: "/home/test/.gskills/skills/old-skill",
-					},
-				}
-				if err := SaveRegistryWithPath(registryPath, existingSkills); err != nil {
-					t.Fatalf("setup failed: %v", err)
-				}
-			},
-		},
+		{"nil error", nil, false},
+		{"403 error", fmt.Errorf("API rate limit exceeded: 403"), true},
+		{"429 error", fmt.Errorf("too many requests: 429"), true},
+		{"other error", fmt.Errorf("some other error"), false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			registryPath := filepath.Join(tmpDir, "skills.json")
-
-			if tt.setupFile != nil {
-				tt.setupFile(t, registryPath)
-			}
-
-			err := SaveRegistryWithPath(registryPath, tt.skills)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("SaveRegistryWithPath() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-
-			if !tt.wantErr {
-				loadedSkills, err := loadRegistryWithPath(registryPath)
-				if err != nil {
-					t.Errorf("SaveRegistryWithPath() failed to load saved data: %v", err)
-					return
-				}
-				if len(loadedSkills) != len(tt.skills) {
-					t.Errorf("SaveRegistryWithPath() saved %d skills, want %d", len(loadedSkills), len(tt.skills))
-				}
-				for i, skill := range loadedSkills {
-					if skill.ID != tt.skills[i].ID {
-						t.Errorf("SaveRegistryWithPath()[%d].ID = %v, want %v", i, skill.ID, tt.skills[i].ID)
-					}
-					if skill.Name != tt.skills[i].Name {
-						t.Errorf("SaveRegistryWithPath()[%d].Name = %v, want %v", i, skill.Name, tt.skills[i].Name)
-					}
-					if skill.Version != tt.skills[i].Version {
-						t.Errorf("SaveRegistryWithPath()[%d].Version = %v, want %v", i, skill.Version, tt.skills[i].Version)
-					}
-				}
+			if got := isRateLimitError(tt.err); got != tt.want {
+				t.Errorf("isRateLimitError() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestSaveRegistryAtomic(t *testing.T) {
-	tmpDir := t.TempDir()
-	registryPath := filepath.Join(tmpDir, "skills.json")
-
-	skills := []types.SkillMetadata{
-		{
-			ID:        "test-skill@main",
-			Name:      "test-skill",
-			Version:   "main",
-			SourceURL: "https://github.com/test/repo/tree/main/test-skill",
-			StorePath: "/home/test/.gskills/skills/test-skill",
-		},
+func TestDownloadStats(t *testing.T) {
+	stats := &DownloadStats{
+		FilesDownloaded: 5,
+		DirsCreated:     2,
+		BytesDownloaded: 1024,
 	}
 
-	tmpPath := registryPath + ".tmp"
-	initialData := []byte("initial content")
-	if err := os.WriteFile(registryPath, initialData, 0644); err != nil {
-		t.Fatalf("failed to create initial file: %v", err)
+	if stats.FilesDownloaded != 5 {
+		t.Errorf("FilesDownloaded = %d, want 5", stats.FilesDownloaded)
 	}
 
-	err := SaveRegistryWithPath(registryPath, skills)
-	if err != nil {
-		t.Fatalf("SaveRegistryWithPath() error = %v", err)
+	if stats.DirsCreated != 2 {
+		t.Errorf("DirsCreated = %d, want 2", stats.DirsCreated)
 	}
 
-	if _, err := os.Stat(tmpPath); !os.IsNotExist(err) {
-		t.Error("SaveRegistryWithPath() temporary file was not cleaned up")
-	}
-
-	data, err := os.ReadFile(registryPath)
-	if err != nil {
-		t.Fatalf("failed to read saved file: %v", err)
-	}
-	if string(data) == string(initialData) {
-		t.Error("SaveRegistryWithPath() did not update the file")
-	}
-}
-
-func TestAddOrUpdateSkill(t *testing.T) {
-	tests := []struct {
-		name       string
-		setupFile  func(t *testing.T, registryPath string)
-		skillToAdd *types.SkillMetadata
-		wantErr    bool
-		wantCount  int
-		expectedID string
-	}{
-		{
-			name: "add new skill",
-			setupFile: func(t *testing.T, registryPath string) {
-			},
-			skillToAdd: &types.SkillMetadata{
-				ID:        "new-skill@main",
-				Name:      "new-skill",
-				Version:   "main",
-				SourceURL: "https://github.com/test/repo/tree/main/new-skill",
-				StorePath: "/home/test/.gskills/skills/new-skill",
-			},
-			wantErr:    false,
-			wantCount:  1,
-			expectedID: "new-skill@main",
-		},
-		{
-			name: "update existing skill",
-			setupFile: func(t *testing.T, registryPath string) {
-				existingSkills := []types.SkillMetadata{
-					{
-						ID:        "existing-skill@main",
-						Name:      "existing-skill",
-						Version:   "main",
-						SourceURL: "https://github.com/test/repo/tree/main/existing-skill",
-						StorePath: "/home/test/.gskills/skills/existing-skill",
-					},
-				}
-				if err := SaveRegistryWithPath(registryPath, existingSkills); err != nil {
-					t.Fatalf("setup failed: %v", err)
-				}
-			},
-			skillToAdd: &types.SkillMetadata{
-				ID:        "existing-skill@main",
-				Name:      "existing-skill",
-				Version:   "main",
-				SourceURL: "https://github.com/test/repo/tree/main/existing-skill",
-				StorePath: "/home/test/.gskills/skills/existing-skill",
-			},
-			wantErr:    false,
-			wantCount:  1,
-			expectedID: "existing-skill@main",
-		},
-		{
-			name: "add different version of same skill",
-			setupFile: func(t *testing.T, registryPath string) {
-				existingSkills := []types.SkillMetadata{
-					{
-						ID:        "skill@main",
-						Name:      "skill",
-						Version:   "main",
-						SourceURL: "https://github.com/test/repo/tree/main/skill",
-						StorePath: "/home/test/.gskills/skills/skill",
-					},
-				}
-				if err := SaveRegistryWithPath(registryPath, existingSkills); err != nil {
-					t.Fatalf("setup failed: %v", err)
-				}
-			},
-			skillToAdd: &types.SkillMetadata{
-				ID:        "skill@v1.0.0",
-				Name:      "skill",
-				Version:   "v1.0.0",
-				SourceURL: "https://github.com/test/repo/tree/v1.0.0/skill",
-				StorePath: "/home/test/.gskills/skills/skill-v1.0.0",
-			},
-			wantErr:    false,
-			wantCount:  2,
-			expectedID: "skill@v1.0.0",
-		},
-		{
-			name: "add multiple skills",
-			setupFile: func(t *testing.T, registryPath string) {
-				existingSkills := []types.SkillMetadata{
-					{
-						ID:        "skill-a@main",
-						Name:      "skill-a",
-						Version:   "main",
-						SourceURL: "https://github.com/test/repo/tree/main/skill-a",
-						StorePath: "/home/test/.gskills/skills/skill-a",
-					},
-				}
-				if err := SaveRegistryWithPath(registryPath, existingSkills); err != nil {
-					t.Fatalf("setup failed: %v", err)
-				}
-			},
-			skillToAdd: &types.SkillMetadata{
-				ID:        "skill-b@main",
-				Name:      "skill-b",
-				Version:   "main",
-				SourceURL: "https://github.com/test/repo/tree/main/skill-b",
-				StorePath: "/home/test/.gskills/skills/skill-b",
-			},
-			wantErr:    false,
-			wantCount:  2,
-			expectedID: "skill-b@main",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			registryPath := filepath.Join(tmpDir, "skills.json")
-
-			if tt.setupFile != nil {
-				tt.setupFile(t, registryPath)
-			}
-
-			err := addOrUpdateSkillWithPath(registryPath, tt.skillToAdd)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("addOrUpdateSkillWithPath() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-
-			loadedSkills, err := loadRegistryWithPath(registryPath)
-			if err != nil {
-				t.Fatalf("failed to load registry after add/update: %v", err)
-			}
-			if len(loadedSkills) != tt.wantCount {
-				t.Errorf("registry contains %d skills, want %d", len(loadedSkills), tt.wantCount)
-			}
-			found := false
-			for _, skill := range loadedSkills {
-				if skill.ID == tt.expectedID {
-					found = true
-					if skill.Name != tt.skillToAdd.Name {
-						t.Errorf("skill.Name = %v, want %v", skill.Name, tt.skillToAdd.Name)
-					}
-					if skill.Version != tt.skillToAdd.Version {
-						t.Errorf("skill.Version = %v, want %v", skill.Version, tt.skillToAdd.Version)
-					}
-					break
-				}
-			}
-			if !found {
-				t.Errorf("registry does not contain expected skill ID: %s", tt.expectedID)
-			}
-		})
-	}
-}
-
-func TestRemoveSkill(t *testing.T) {
-	tests := []struct {
-		name        string
-		setupFile   func(t *testing.T, registryPath string)
-		skillID     string
-		wantErr     bool
-		wantCount   int
-		expectedIDs map[string]bool
-	}{
-		{
-			name: "remove existing skill",
-			setupFile: func(t *testing.T, registryPath string) {
-				skills := []types.SkillMetadata{
-					{
-						ID:        "skill-a@main",
-						Name:      "skill-a",
-						Version:   "main",
-						SourceURL: "https://github.com/test/repo/tree/main/skill-a",
-						StorePath: "/home/test/.gskills/skills/skill-a",
-					},
-					{
-						ID:        "skill-b@main",
-						Name:      "skill-b",
-						Version:   "main",
-						SourceURL: "https://github.com/test/repo/tree/main/skill-b",
-						StorePath: "/home/test/.gskills/skills/skill-b",
-					},
-				}
-				if err := SaveRegistryWithPath(registryPath, skills); err != nil {
-					t.Fatalf("setup failed: %v", err)
-				}
-			},
-			skillID:   "skill-a@main",
-			wantErr:   false,
-			wantCount: 1,
-			expectedIDs: map[string]bool{
-				"skill-a@main": false,
-				"skill-b@main": true,
-			},
-		},
-		{
-			name: "remove non-existent skill",
-			setupFile: func(t *testing.T, registryPath string) {
-				skills := []types.SkillMetadata{
-					{
-						ID:        "skill-a@main",
-						Name:      "skill-a",
-						Version:   "main",
-						SourceURL: "https://github.com/test/repo/tree/main/skill-a",
-						StorePath: "/home/test/.gskills/skills/skill-a",
-					},
-				}
-				if err := SaveRegistryWithPath(registryPath, skills); err != nil {
-					t.Fatalf("setup failed: %v", err)
-				}
-			},
-			skillID:   "skill-b@main",
-			wantErr:   false,
-			wantCount: 1,
-			expectedIDs: map[string]bool{
-				"skill-a@main": true,
-			},
-		},
-		{
-			name: "remove from empty registry",
-			setupFile: func(t *testing.T, registryPath string) {
-			},
-			skillID:     "skill-a@main",
-			wantErr:     false,
-			wantCount:   0,
-			expectedIDs: map[string]bool{},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			registryPath := filepath.Join(tmpDir, "skills.json")
-
-			if tt.setupFile != nil {
-				tt.setupFile(t, registryPath)
-			}
-
-			err := removeSkillWithPath(registryPath, tt.skillID)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("removeSkillWithPath() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-
-			if !tt.wantErr {
-				finalSkills, err := loadRegistryWithPath(registryPath)
-				if err != nil {
-					t.Fatalf("failed to load registry after remove: %v", err)
-				}
-				if len(finalSkills) != tt.wantCount {
-					t.Errorf("registry contains %d skills, want %d", len(finalSkills), tt.wantCount)
-				}
-				for id, shouldExist := range tt.expectedIDs {
-					found := false
-					for _, skill := range finalSkills {
-						if skill.ID == id {
-							found = true
-							break
-						}
-					}
-					if found != shouldExist {
-						t.Errorf("skill %s existence = %v, want %v", id, found, shouldExist)
-					}
-				}
-			}
-		})
-	}
-}
-
-func TestValidateSkillMetadata(t *testing.T) {
-	tests := []struct {
-		name    string
-		skill   *types.SkillMetadata
-		wantErr bool
-		errMsg  string
-	}{
-		{
-			name: "valid skill",
-			skill: &types.SkillMetadata{
-				ID:        "test-skill@main",
-				Name:      "test-skill",
-				Version:   "main",
-				SourceURL: "https://github.com/test/repo/tree/main/test-skill",
-				StorePath: "/home/test/.gskills/skills/test-skill",
-			},
-			wantErr: false,
-		},
-		{
-			name:    "nil skill",
-			skill:   nil,
-			wantErr: true,
-			errMsg:  "cannot be nil",
-		},
-		{
-			name: "empty ID",
-			skill: &types.SkillMetadata{
-				Name:      "test-skill",
-				Version:   "main",
-				SourceURL: "https://github.com/test/repo/tree/main/test-skill",
-				StorePath: "/home/test/.gskills/skills/test-skill",
-			},
-			wantErr: true,
-			errMsg:  "ID cannot be empty",
-		},
-		{
-			name: "empty name",
-			skill: &types.SkillMetadata{
-				ID:        "test-skill@main",
-				Version:   "main",
-				SourceURL: "https://github.com/test/repo/tree/main/test-skill",
-				StorePath: "/home/test/.gskills/skills/test-skill",
-			},
-			wantErr: true,
-			errMsg:  "name cannot be empty",
-		},
-		{
-			name: "empty version",
-			skill: &types.SkillMetadata{
-				ID:        "test-skill@main",
-				Name:      "test-skill",
-				SourceURL: "https://github.com/test/repo/tree/main/test-skill",
-				StorePath: "/home/test/.gskills/skills/test-skill",
-			},
-			wantErr: true,
-			errMsg:  "version cannot be empty",
-		},
-		{
-			name: "empty source URL",
-			skill: &types.SkillMetadata{
-				ID:        "test-skill@main",
-				Name:      "test-skill",
-				Version:   "main",
-				StorePath: "/home/test/.gskills/skills/test-skill",
-			},
-			wantErr: true,
-			errMsg:  "source URL cannot be empty",
-		},
-		{
-			name: "empty store path",
-			skill: &types.SkillMetadata{
-				ID:        "test-skill@main",
-				Name:      "test-skill",
-				Version:   "main",
-				SourceURL: "https://github.com/test/repo/tree/main/test-skill",
-			},
-			wantErr: true,
-			errMsg:  "store path cannot be empty",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateSkillMetadata(tt.skill)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("validateSkillMetadata() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if tt.wantErr && err != nil {
-				if !strings.Contains(err.Error(), tt.errMsg) {
-					t.Errorf("validateSkillMetadata() error = %v, expected to contain %q", err, tt.errMsg)
-				}
-			}
-		})
-	}
-}
-
-func TestAddOrUpdateSkillConcurrent(t *testing.T) {
-	t.Run("concurrent adds", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		registryPath := filepath.Join(tmpDir, "skills.json")
-
-		goroutines := 10
-		var wg sync.WaitGroup
-		wg.Add(goroutines)
-		errors := make(chan error, goroutines)
-
-		for i := 0; i < goroutines; i++ {
-			go func(index int) {
-				defer wg.Done()
-				skill := &types.SkillMetadata{
-					ID:        fmt.Sprintf("skill-%d@main", index),
-					Name:      fmt.Sprintf("skill-%d", index),
-					Version:   "main",
-					SourceURL: fmt.Sprintf("https://github.com/test/repo/tree/main/skill-%d", index),
-					StorePath: fmt.Sprintf("/home/test/.gskills/skills/skill-%d", index),
-				}
-				err := addOrUpdateSkillWithPath(registryPath, skill)
-				errors <- err
-			}(i)
-		}
-
-		wg.Wait()
-		close(errors)
-
-		errorCount := 0
-		for err := range errors {
-			if err != nil {
-				errorCount++
-				t.Logf("Error from goroutine: %v", err)
-			}
-		}
-
-		if errorCount > 0 {
-			t.Errorf("concurrent adds had %d errors", errorCount)
-		}
-
-		loaded, err := loadRegistryWithPath(registryPath)
-		if err != nil {
-			t.Fatalf("failed to load registry after concurrent adds: %v", err)
-		}
-
-		if len(loaded) != goroutines {
-			t.Errorf("expected %d skills, got %d", goroutines, len(loaded))
-		}
-	})
-}
-
-func BenchmarkAddOrUpdateSkill(b *testing.B) {
-	tmpDir := b.TempDir()
-	registryPath := filepath.Join(tmpDir, "skills.json")
-
-	skill := &types.SkillMetadata{
-		ID:        "benchmark-skill@main",
-		Name:      "benchmark-skill",
-		Version:   "main",
-		SourceURL: "https://github.com/test/repo/tree/main/benchmark-skill",
-		StorePath: "/home/test/.gskills/skills/benchmark-skill",
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		skill.ID = fmt.Sprintf("benchmark-skill-%d@main", i)
-		_ = addOrUpdateSkillWithPath(registryPath, skill)
+	if stats.BytesDownloaded != 1024 {
+		t.Errorf("BytesDownloaded = %d, want 1024", stats.BytesDownloaded)
 	}
 }

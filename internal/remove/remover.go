@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/smy-101/gskills/internal/add"
+	"github.com/smy-101/gskills/internal/registry"
 )
 
 func promptForConfirmation(name string) (bool, error) {
@@ -40,7 +40,7 @@ func removeSkillDirectory(storePath string) error {
 // It prompts the user for confirmation before performing the removal.
 // If the skill is linked to any projects, it will also remove all symlinks.
 func RemoveSkillByName(name string) error {
-	skill, err := add.FindSkillByName(name)
+	skill, err := registry.FindSkillByName(name)
 	if err != nil {
 		return err
 	}
@@ -80,7 +80,7 @@ func RemoveSkillByName(name string) error {
 		return err
 	}
 
-	if err := add.RemoveSkill(skill.ID); err != nil {
+	if err := registry.RemoveSkill(skill.ID); err != nil {
 		return fmt.Errorf("failed to remove skill from registry: %w", err)
 	}
 

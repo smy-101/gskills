@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/smy-101/gskills/internal/add"
+	"github.com/smy-101/gskills/internal/registry"
 	"github.com/smy-101/gskills/internal/types"
 )
 
 // MigrateLegacyLinks converts old-style linked skill entries (with "linked-" prefix)
 // to the new format where links are tracked in the original skill's LinkedProjects field.
 func MigrateLegacyLinks() error {
-	skills, err := add.LoadRegistry()
+	skills, err := registry.LoadRegistry()
 	if err != nil {
 		return fmt.Errorf("failed to load registry: %w", err)
 	}
@@ -58,13 +58,13 @@ func MigrateLegacyLinks() error {
 	}
 
 	for _, skill := range toUpdate {
-		if err := add.UpdateSkill(&skill); err != nil {
+		if err := registry.UpdateSkill(&skill); err != nil {
 			return fmt.Errorf("failed to update skill '%s': %w", skill.Name, err)
 		}
 	}
 
 	for _, id := range toRemove {
-		if err := add.RemoveSkill(id); err != nil {
+		if err := registry.RemoveSkill(id); err != nil {
 			fmt.Printf("Warning: Failed to remove legacy entry '%s': %v\n", id, err)
 		}
 	}
@@ -81,7 +81,7 @@ func MigrateLegacyLinks() error {
 // CheckLegacyLinks checks if there are any legacy linked skills in the registry
 // and returns the count. Does not perform migration.
 func CheckLegacyLinks() (int, error) {
-	skills, err := add.LoadRegistry()
+	skills, err := registry.LoadRegistry()
 	if err != nil {
 		return 0, fmt.Errorf("failed to load registry: %w", err)
 	}

@@ -1,4 +1,4 @@
-package add
+package registry
 
 import (
 	"encoding/json"
@@ -12,8 +12,9 @@ import (
 
 const skillsRegistryFile = "skills.json"
 
-var registryMutex sync.Mutex
-var registryMutexes sync.Map
+var (
+	registryMutexes sync.Map
+)
 
 func getRegistryPath() (string, error) {
 	homeDir, err := os.UserHomeDir()
@@ -191,8 +192,6 @@ func removeSkillWithPath(registryPath string, skillID string) error {
 	return SaveRegistryWithPath(registryPath, newSkills)
 }
 
-// FindSkillByName searches for a skill by its name in the registry.
-// Returns the skill metadata if found, or an error if not found.
 func FindSkillByName(name string) (*types.SkillMetadata, error) {
 	if name == "" {
 		return nil, fmt.Errorf("skill name cannot be empty")
@@ -212,8 +211,6 @@ func FindSkillByName(name string) (*types.SkillMetadata, error) {
 	return nil, fmt.Errorf("skill '%s' not found in registry", name)
 }
 
-// UpdateSkill updates an existing skill's metadata in the registry.
-// The skill must have a valid ID that exists in the registry.
 func UpdateSkill(skill *types.SkillMetadata) error {
 	if skill == nil {
 		return fmt.Errorf("skill cannot be nil")

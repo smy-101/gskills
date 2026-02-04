@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smy-101/gskills/internal/add"
+	"github.com/smy-101/gskills/internal/registry"
 	"github.com/smy-101/gskills/internal/types"
 )
 
@@ -259,7 +259,7 @@ func TestLinker_LinkSkill_Integration(t *testing.T) {
 		UpdatedAt: time.Now(),
 	}
 
-	if err := add.AddOrUpdateSkill(testSkill); err != nil {
+	if err := registry.AddOrUpdateSkill(testSkill); err != nil {
 		t.Fatalf("failed to add test skill to registry: %v", err)
 	}
 
@@ -289,7 +289,7 @@ func TestLinker_LinkSkill_Integration(t *testing.T) {
 		t.Errorf("symlink points to %s, want %s", actualLink, skillsDir)
 	}
 
-	updatedSkill, err := add.FindSkillByName("test-skill")
+	updatedSkill, err := registry.FindSkillByName("test-skill")
 	if err != nil {
 		t.Fatalf("failed to find updated skill: %v", err)
 	}

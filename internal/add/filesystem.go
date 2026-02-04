@@ -18,7 +18,7 @@ func checkPathExists(localPath string) (bool, error) {
 	return true, nil
 }
 
-func promptOverwrite() (bool, error) {
+var promptOverwrite = func() (bool, error) {
 	fmt.Print("Target path already exists. Overwrite? [y/N]: ")
 
 	var response string

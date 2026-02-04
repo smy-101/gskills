@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smy-101/gskills/internal/add"
 	"github.com/smy-101/gskills/internal/link"
+	"github.com/smy-101/gskills/internal/registry"
 	"github.com/smy-101/gskills/internal/types"
 )
 
@@ -88,7 +88,7 @@ func TestExecuteLink(t *testing.T) {
 		UpdatedAt: time.Now(),
 	}
 
-	if err := add.AddOrUpdateSkill(testSkill); err != nil {
+	if err := registry.AddOrUpdateSkill(testSkill); err != nil {
 		t.Fatalf("failed to add test skill to registry: %v", err)
 	}
 
@@ -236,7 +236,7 @@ func TestExecuteLink_DefaultToCurrentDirectory(t *testing.T) {
 		UpdatedAt: time.Now(),
 	}
 
-	if err := add.AddOrUpdateSkill(testSkill); err != nil {
+	if err := registry.AddOrUpdateSkill(testSkill); err != nil {
 		t.Fatalf("failed to add test skill to registry: %v", err)
 	}
 

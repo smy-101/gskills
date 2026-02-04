@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/smy-101/gskills/internal/add"
+	"github.com/smy-101/gskills/internal/registry"
 	"github.com/spf13/cobra"
 )
 
@@ -23,7 +23,7 @@ var linkInfoCmd = &cobra.Command{
 }
 
 func executeLinkInfo(skillName string) error {
-	skill, err := add.FindSkillByName(skillName)
+	skill, err := registry.FindSkillByName(skillName)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)

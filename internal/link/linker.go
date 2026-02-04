@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/smy-101/gskills/internal/add"
+	"github.com/smy-101/gskills/internal/registry"
 	"github.com/smy-101/gskills/internal/types"
 )
 
@@ -138,7 +138,7 @@ func (l *Linker) LinkSkill(ctx context.Context, skillName, projectPath string) e
 		}
 	}
 
-	existingSkill, err := add.FindSkillByName(skillName)
+	existingSkill, err := registry.FindSkillByName(skillName)
 	if err != nil {
 		l.logger.Error("Failed to find skill in registry", err, "skill", skillName)
 		if removeErr := os.Remove(targetPath); removeErr != nil {
@@ -171,7 +171,7 @@ func (l *Linker) LinkSkill(ctx context.Context, skillName, projectPath string) e
 
 	existingSkill.UpdatedAt = time.Now()
 
-	if err := add.UpdateSkill(existingSkill); err != nil {
+	if err := registry.UpdateSkill(existingSkill); err != nil {
 		l.logger.Error("Failed to update skills registry", err, "skill", skillName)
 		if removeErr := os.Remove(targetPath); removeErr != nil {
 			l.logger.Error("Failed to clean up symlink after error", removeErr, "path", targetPath)
@@ -283,7 +283,7 @@ func (l *Linker) UnlinkSkill(skillName, projectPath string) error {
 		}
 	}
 
-	skill, err := add.FindSkillByName(skillName)
+	skill, err := registry.FindSkillByName(skillName)
 	if err != nil {
 		return &LinkError{
 			Type:    ErrorTypeSkillNotFound,
@@ -332,7 +332,7 @@ func (l *Linker) UnlinkSkill(skillName, projectPath string) error {
 
 	skill.UpdatedAt = time.Now()
 
-	if err := add.UpdateSkill(skill); err != nil {
+	if err := registry.UpdateSkill(skill); err != nil {
 		return fmt.Errorf("failed to update skills registry: %w", err)
 	}
 

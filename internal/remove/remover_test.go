@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smy-101/gskills/internal/add"
+	"github.com/smy-101/gskills/internal/registry"
 	"github.com/smy-101/gskills/internal/types"
 )
 
@@ -188,7 +188,7 @@ func TestRemoveSkillByName(t *testing.T) {
 						UpdatedAt: time.Now(),
 					},
 				}
-				if err := add.SaveRegistryWithPath(registryPath, skills); err != nil {
+				if err := registry.SaveRegistryWithPath(registryPath, skills); err != nil {
 					t.Fatalf("setup failed: %v", err)
 				}
 				return registryPath, func() {}
@@ -216,7 +216,7 @@ func TestRemoveSkillByName(t *testing.T) {
 						UpdatedAt: time.Now(),
 					},
 				}
-				if err := add.SaveRegistryWithPath(registryPath, skills); err != nil {
+				if err := registry.SaveRegistryWithPath(registryPath, skills); err != nil {
 					t.Fatalf("setup failed: %v", err)
 				}
 				return registryPath, func() {}
@@ -244,7 +244,7 @@ func TestRemoveSkillByName(t *testing.T) {
 						UpdatedAt: time.Now(),
 					},
 				}
-				if err := add.SaveRegistryWithPath(registryPath, skills); err != nil {
+				if err := registry.SaveRegistryWithPath(registryPath, skills); err != nil {
 					t.Fatalf("setup failed: %v", err)
 				}
 				return registryPath, func() {}
@@ -259,7 +259,7 @@ func TestRemoveSkillByName(t *testing.T) {
 			setupFunc: func() (string, func()) {
 				tmpDir := t.TempDir()
 				registryPath := filepath.Join(tmpDir, "skills.json")
-				if err := add.SaveRegistryWithPath(registryPath, []types.SkillMetadata{}); err != nil {
+				if err := registry.SaveRegistryWithPath(registryPath, []types.SkillMetadata{}); err != nil {
 					t.Fatalf("setup failed: %v", err)
 				}
 				return registryPath, func() {}
@@ -355,7 +355,7 @@ func TestRemoveSkillByName(t *testing.T) {
 
 			// Verify skill is removed from registry if confirmed
 			if strings.Contains(tt.input, "y\n") || strings.Contains(tt.input, "yes\n") {
-				skills, err := add.LoadRegistry()
+				skills, err := registry.LoadRegistry()
 				if err != nil {
 					t.Errorf("failed to load registry after removal: %v", err)
 				}

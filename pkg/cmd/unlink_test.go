@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smy-101/gskills/internal/add"
 	"github.com/smy-101/gskills/internal/link"
+	"github.com/smy-101/gskills/internal/registry"
 	"github.com/smy-101/gskills/internal/types"
 )
 
@@ -88,7 +88,7 @@ func TestExecuteUnlink(t *testing.T) {
 		UpdatedAt: time.Now(),
 	}
 
-	if err := add.AddOrUpdateSkill(testSkill); err != nil {
+	if err := registry.AddOrUpdateSkill(testSkill); err != nil {
 		t.Fatalf("failed to add test skill to registry: %v", err)
 	}
 
@@ -245,7 +245,7 @@ func TestExecuteUnlink_DefaultToCurrentDirectory(t *testing.T) {
 		UpdatedAt: time.Now(),
 	}
 
-	if err := add.AddOrUpdateSkill(testSkill); err != nil {
+	if err := registry.AddOrUpdateSkill(testSkill); err != nil {
 		t.Fatalf("failed to add test skill to registry: %v", err)
 	}
 
@@ -273,7 +273,7 @@ func TestExecuteUnlink_DefaultToCurrentDirectory(t *testing.T) {
 		t.Error("symlink was not removed")
 	}
 
-	skill, err := add.FindSkillByName("default-unlink-test-skill")
+	skill, err := registry.FindSkillByName("default-unlink-test-skill")
 	if err != nil {
 		t.Fatalf("failed to find skill: %v", err)
 	}
