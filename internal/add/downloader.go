@@ -22,7 +22,7 @@ func isRateLimitError(err error) bool {
 	return strings.Contains(errStr, "403") || strings.Contains(errStr, "429") || strings.Contains(errStr, "rate limit exceeded")
 }
 
-func (c *Client) getBranchCommitSHA(ctx context.Context, repoInfo *GitHubRepoInfo) (string, error) {
+func (c *Client) GetBranchCommitSHA(ctx context.Context, repoInfo *GitHubRepoInfo) (string, error) {
 	apiURL := fmt.Sprintf("%s/repos/%s/%s/commits/%s", c.baseURL, repoInfo.Owner, repoInfo.Repo, repoInfo.Branch)
 
 	var lastErr error
@@ -78,7 +78,7 @@ func (c *Client) getBranchCommitSHA(ctx context.Context, repoInfo *GitHubRepoInf
 	return "", lastErr
 }
 
-func (c *Client) getGitHubContents(ctx context.Context, repoInfo *GitHubRepoInfo, path string) ([]types.GitHubContent, error) {
+func (c *Client) GetGitHubContents(ctx context.Context, repoInfo *GitHubRepoInfo, path string) ([]types.GitHubContent, error) {
 	apiURL := fmt.Sprintf("%s/repos/%s/%s/contents/%s?ref=%s", c.baseURL, repoInfo.Owner, repoInfo.Repo, path, repoInfo.Branch)
 
 	var lastErr error
@@ -129,7 +129,7 @@ func (c *Client) getGitHubContents(ctx context.Context, repoInfo *GitHubRepoInfo
 	return nil, lastErr
 }
 
-func (c *Client) downloadFile(ctx context.Context, downloadURL string) ([]byte, error) {
+func (c *Client) DownloadFile(ctx context.Context, downloadURL string) ([]byte, error) {
 	var lastErr error
 	for attempt := range maxRetryAttempts {
 		resp, err := c.restyClient.R().SetContext(ctx).Get(downloadURL)

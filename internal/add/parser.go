@@ -15,7 +15,7 @@ type GitHubRepoInfo struct {
 	Path   string
 }
 
-func parseGitHubURL(rawURL string) (*GitHubRepoInfo, error) {
+func ParseGitHubURL(rawURL string) (*GitHubRepoInfo, error) {
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL: %w", err)

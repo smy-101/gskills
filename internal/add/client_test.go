@@ -376,10 +376,10 @@ func TestGetBranchCommitSHA(t *testing.T) {
 			}
 
 			ctx := context.Background()
-			sha, err := client.getBranchCommitSHA(ctx, repoInfo)
+			sha, err := client.GetBranchCommitSHA(ctx, repoInfo)
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("getBranchCommitSHA() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("GetBranchCommitSHA() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
@@ -443,10 +443,10 @@ func TestDownloadFile(t *testing.T) {
 			client.logger = &MockLogger{}
 
 			ctx := context.Background()
-			data, err := client.downloadFile(ctx, ts.URL()+"/download")
+			data, err := client.DownloadFile(ctx, ts.URL()+"/download")
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("downloadFile() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("DownloadFile() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
@@ -521,10 +521,10 @@ func TestGetGitHubContents(t *testing.T) {
 			}
 
 			ctx := context.Background()
-			contents, err := client.getGitHubContents(ctx, repoInfo, "test")
+			contents, err := client.GetGitHubContents(ctx, repoInfo, "test")
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("getGitHubContents() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("GetGitHubContents() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 

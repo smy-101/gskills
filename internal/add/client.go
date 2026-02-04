@@ -62,6 +62,12 @@ func NewClient(token string) *Client {
 	}
 }
 
+// SetBaseURL sets the base URL for GitHub API requests.
+// This method is intended for testing purposes only.
+func (c *Client) SetBaseURL(url string) {
+	c.baseURL = url
+}
+
 // Download downloads a skill package from the specified GitHub URL.
 // The URL must be in format: https://github.com/owner/repo/tree/branch/path
 //
@@ -75,7 +81,7 @@ func NewClient(token string) *Client {
 //
 // Returns an error if any step fails, nil on success.
 func (c *Client) Download(rawURL string) error {
-	repoInfo, err := parseGitHubURL(rawURL)
+	repoInfo, err := ParseGitHubURL(rawURL)
 	if err != nil {
 		return &DownloadError{
 			Type:    ErrorTypeInvalidURL,
@@ -104,7 +110,7 @@ func (c *Client) Download(rawURL string) error {
 		}
 	}
 
-	commitSHA, err := c.getBranchCommitSHA(ctx, repoInfo)
+	commitSHA, err := c.GetBranchCommitSHA(ctx, repoInfo)
 	if err != nil {
 		return &DownloadError{
 			Type:    ErrorTypeAPI,
@@ -267,7 +273,7 @@ func (c *Client) downloadRecursive(ctx context.Context, repoInfo *GitHubRepoInfo
 			defer func() { <-sem }()
 		}
 
-		contents, err := c.getGitHubContents(ctx, repoInfo, remotePath)
+		contents, err := c.GetGitHubContents(ctx, repoInfo, remotePath)
 		if err != nil {
 			mu.Lock()
 			downloadErr = fmt.Errorf("failed to get contents for %s: %w", remotePath, err)
@@ -296,7 +302,7 @@ func (c *Client) downloadRecursive(ctx context.Context, repoInfo *GitHubRepoInfo
 				wg.Add(1)
 				go downloadTask(path.Join(remotePath, item.Name), itemLocalPath)
 			case "file":
-				data, err := c.downloadFile(ctx, item.DownloadURL)
+				data, err := c.DownloadFile(ctx, item.DownloadURL)
 				if err != nil {
 					mu.Lock()
 					downloadErr = fmt.Errorf("failed to download file %s: %w", item.Name, err)
