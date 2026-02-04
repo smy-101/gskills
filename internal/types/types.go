@@ -10,6 +10,7 @@ type SkillMetadata struct {
 	StorePath      string                       `json:"store_path"`
 	UpdatedAt      time.Time                    `json:"updated_at"`
 	Version        string                       `json:"version,omitempty"`
+	CommitSHA      string                       `json:"commit_sha"`
 	Description    string                       `json:"description,omitempty"`
 	LinkedProjects map[string]LinkedProjectInfo `json:"linked_projects,omitempty"`
 }

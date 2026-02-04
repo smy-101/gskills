@@ -97,6 +97,9 @@ func validateSkillMetadata(skill *types.SkillMetadata) error {
 	if skill.Version == "" {
 		return fmt.Errorf("skill version cannot be empty")
 	}
+	if skill.CommitSHA == "" {
+		return fmt.Errorf("skill commit SHA cannot be empty")
+	}
 	if skill.SourceURL == "" {
 		return fmt.Errorf("skill source URL cannot be empty")
 	}

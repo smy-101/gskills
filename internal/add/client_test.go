@@ -316,6 +316,84 @@ func TestCheckSKILLExists(t *testing.T) {
 	}
 }
 
+func TestGetBranchCommitSHA(t *testing.T) {
+	tests := []struct {
+		name       string
+		statusCode int
+		response   string
+		wantSHA    string
+		wantErr    bool
+	}{
+		{
+			name:       "successful fetch",
+			statusCode: http.StatusOK,
+			response:   `{"sha":"abc123def456","commit":{"message":"test commit"}}`,
+			wantSHA:    "abc123def456",
+			wantErr:    false,
+		},
+		{
+			name:       "not found",
+			statusCode: http.StatusNotFound,
+			response:   `{"message":"Not Found"}`,
+			wantSHA:    "",
+			wantErr:    true,
+		},
+		{
+			name:       "missing sha in response",
+			statusCode: http.StatusOK,
+			response:   `{"commit":{"message":"test"}}`,
+			wantSHA:    "",
+			wantErr:    true,
+		},
+		{
+			name:       "invalid JSON",
+			statusCode: http.StatusOK,
+			response:   `invalid json`,
+			wantSHA:    "",
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ts := NewTestServer()
+			defer ts.Close()
+
+			path := "/repos/owner/repo/commits/main"
+			ts.SetHandler(path, func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tt.statusCode)
+				w.Write([]byte(tt.response))
+			})
+
+			client := NewClient("")
+			client.baseURL = ts.URL()
+
+			repoInfo := &GitHubRepoInfo{
+				Owner:  "owner",
+				Repo:   "repo",
+				Branch: "main",
+				Path:   "skills/test",
+			}
+
+			ctx := context.Background()
+			sha, err := client.getBranchCommitSHA(ctx, repoInfo)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("getBranchCommitSHA() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if sha != tt.wantSHA {
+				t.Errorf("getBranchCommitSHA() = %v, want %v", sha, tt.wantSHA)
+			}
+
+			if !tt.wantErr && ts.GetCallCount(path) != 1 {
+				t.Errorf("getBranchCommitSHA() called test server %d times, want 1", ts.GetCallCount(path))
+			}
+		})
+	}
+}
+
 func TestDownloadFile(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -627,6 +705,16 @@ func TestDownload(t *testing.T) {
 					})
 				})
 
+				ts.SetHandler("/repos/owner/repo/commits/main", func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusOK)
+					json.NewEncoder(w).Encode(map[string]interface{}{
+						"sha": "abc123def456",
+						"commit": map[string]interface{}{
+							"message": "test commit",
+						},
+					})
+				})
+
 				ts.SetHandler("/repos/owner/repo/contents/skill", func(w http.ResponseWriter, r *http.Request) {
 					contents := []types.GitHubContent{
 						{
@@ -674,6 +762,9 @@ func TestDownload(t *testing.T) {
 						if s.Name != "skill" {
 							t.Errorf("skill name = %s, want 'skill'", s.Name)
 						}
+						if s.CommitSHA != "abc123def456" {
+							t.Errorf("skill commit SHA = %s, want 'abc123def456'", s.CommitSHA)
+						}
 						break
 					}
 				}
@@ -701,6 +792,25 @@ func TestDownload(t *testing.T) {
 			errorType: ErrorTypeValidation,
 		},
 		{
+			name: "commit SHA fetch fails",
+			url:  "https://github.com/owner/repo/tree/main/nocommit",
+			setupServer: func(ts *TestServer) {
+				ts.SetHandler("/repos/owner/repo/contents/nocommit/SKILL.md", func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusOK)
+					json.NewEncoder(w).Encode(map[string]interface{}{
+						"name": "SKILL.md",
+						"type": "file",
+					})
+				})
+
+				ts.SetHandler("/repos/owner/repo/commits/main", func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusNotFound)
+				})
+			},
+			wantErr:   true,
+			errorType: ErrorTypeAPI,
+		},
+		{
 			name: "directory already exists - overwrite",
 			url:  "https://github.com/owner/repo/tree/main/skill2",
 			setupServer: func(ts *TestServer) {
@@ -713,6 +823,16 @@ func TestDownload(t *testing.T) {
 					json.NewEncoder(w).Encode(map[string]interface{}{
 						"name": "SKILL.md",
 						"type": "file",
+					})
+				})
+
+				ts.SetHandler("/repos/owner/repo/commits/main", func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusOK)
+					json.NewEncoder(w).Encode(map[string]interface{}{
+						"sha": "xyz789",
+						"commit": map[string]interface{}{
+							"message": "overwrite test",
+						},
 					})
 				})
 
@@ -757,6 +877,16 @@ func TestDownload(t *testing.T) {
 					json.NewEncoder(w).Encode(map[string]interface{}{
 						"name": "SKILL.md",
 						"type": "file",
+					})
+				})
+
+				ts.SetHandler("/repos/owner/repo/commits/main", func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusOK)
+					json.NewEncoder(w).Encode(map[string]interface{}{
+						"sha": "cancel123",
+						"commit": map[string]interface{}{
+							"message": "cancel test",
+						},
 					})
 				})
 			},

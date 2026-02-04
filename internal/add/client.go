@@ -104,6 +104,15 @@ func (c *Client) Download(rawURL string) error {
 		}
 	}
 
+	commitSHA, err := c.getBranchCommitSHA(ctx, repoInfo)
+	if err != nil {
+		return &DownloadError{
+			Type:    ErrorTypeAPI,
+			Message: "failed to get commit SHA",
+			Err:     err,
+		}
+	}
+
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return &DownloadError{
@@ -212,6 +221,7 @@ func (c *Client) Download(rawURL string) error {
 		ID:        fmt.Sprintf("%s@%s", skillName, repoInfo.Branch),
 		Name:      skillName,
 		Version:   repoInfo.Branch,
+		CommitSHA: commitSHA,
 		SourceURL: rawURL,
 		StorePath: localPath,
 		UpdatedAt: time.Now(),

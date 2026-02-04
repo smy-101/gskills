@@ -254,6 +254,7 @@ func TestLinker_LinkSkill_Integration(t *testing.T) {
 		ID:        "test-skill@main",
 		Name:      "test-skill",
 		Version:   "main",
+		CommitSHA: "abc123",
 		SourceURL: "https://example.com/test",
 		StorePath: skillsDir,
 		UpdatedAt: time.Now(),
