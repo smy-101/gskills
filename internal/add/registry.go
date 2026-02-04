@@ -123,9 +123,13 @@ func addOrUpdateSkillWithPath(registryPath string, skill *types.SkillMetadata) e
 		return err
 	}
 
-	mu, _ := registryMutexes.LoadOrStore(registryPath, &sync.Mutex{})
-	mu.(*sync.Mutex).Lock()
-	defer mu.(*sync.Mutex).Unlock()
+	muIface, _ := registryMutexes.LoadOrStore(registryPath, &sync.Mutex{})
+	mu, ok := muIface.(*sync.Mutex)
+	if !ok {
+		return fmt.Errorf("failed to get mutex for registry path")
+	}
+	mu.Lock()
+	defer mu.Unlock()
 
 	skills, err := loadRegistryWithPath(registryPath)
 	if err != nil {
@@ -164,9 +168,13 @@ func removeSkillWithPath(registryPath string, skillID string) error {
 		return fmt.Errorf("skill ID cannot be empty")
 	}
 
-	mu, _ := registryMutexes.LoadOrStore(registryPath, &sync.Mutex{})
-	mu.(*sync.Mutex).Lock()
-	defer mu.(*sync.Mutex).Unlock()
+	muIface, _ := registryMutexes.LoadOrStore(registryPath, &sync.Mutex{})
+	mu, ok := muIface.(*sync.Mutex)
+	if !ok {
+		return fmt.Errorf("failed to get mutex for registry path")
+	}
+	mu.Lock()
+	defer mu.Unlock()
 
 	skills, err := loadRegistryWithPath(registryPath)
 	if err != nil {
@@ -219,9 +227,13 @@ func UpdateSkill(skill *types.SkillMetadata) error {
 		return err
 	}
 
-	mu, _ := registryMutexes.LoadOrStore(registryPath, &sync.Mutex{})
-	mu.(*sync.Mutex).Lock()
-	defer mu.(*sync.Mutex).Unlock()
+	muIface, _ := registryMutexes.LoadOrStore(registryPath, &sync.Mutex{})
+	mu, ok := muIface.(*sync.Mutex)
+	if !ok {
+		return fmt.Errorf("failed to get mutex for registry path")
+	}
+	mu.Lock()
+	defer mu.Unlock()
 
 	skills, err := loadRegistryWithPath(registryPath)
 	if err != nil {

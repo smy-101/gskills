@@ -1145,7 +1145,7 @@ func TestValidateSkillMetadata(t *testing.T) {
 				return
 			}
 			if tt.wantErr && err != nil {
-				if !contains(err.Error(), tt.errMsg) {
+				if !strings.Contains(err.Error(), tt.errMsg) {
 					t.Errorf("validateSkillMetadata() error = %v, expected to contain %q", err, tt.errMsg)
 				}
 			}
@@ -1221,18 +1221,4 @@ func BenchmarkAddOrUpdateSkill(b *testing.B) {
 		skill.ID = fmt.Sprintf("benchmark-skill-%d@main", i)
 		_ = addOrUpdateSkillWithPath(registryPath, skill)
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
-		len(s) >= len(substr) && (s == substr || findSubstring(s, substr)))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

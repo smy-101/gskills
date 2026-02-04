@@ -34,9 +34,7 @@ var addCmd = &cobra.Command{
 }
 
 func executeAdd(rawURL string) error {
-	// 获取配置
 	token := viper.GetString("github_token")
-	fmt.Printf("Using GitHub token: %s\n", token)
 	client := add.NewClient(token)
 
 	err := client.Download(rawURL)

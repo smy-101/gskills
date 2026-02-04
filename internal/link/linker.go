@@ -64,6 +64,16 @@ func (l *Linker) LinkSkill(ctx context.Context, skillName, projectPath string) e
 		return err
 	}
 
+	select {
+	case <-ctx.Done():
+		return &LinkError{
+			Type:    ErrorTypeFilesystem,
+			Message: "operation cancelled",
+			Err:     ctx.Err(),
+		}
+	default:
+	}
+
 	absProjectPath, err := filepath.Abs(projectPath)
 	if err != nil {
 		return &LinkError{
@@ -73,8 +83,14 @@ func (l *Linker) LinkSkill(ctx context.Context, skillName, projectPath string) e
 		}
 	}
 
-	if err := l.validateProjectPath(absProjectPath); err != nil {
-		return err
+	select {
+	case <-ctx.Done():
+		return &LinkError{
+			Type:    ErrorTypeFilesystem,
+			Message: "operation cancelled",
+			Err:     ctx.Err(),
+		}
+	default:
 	}
 
 	targetDir := filepath.Join(absProjectPath, opencodeSkillsDir)
@@ -104,6 +120,16 @@ func (l *Linker) LinkSkill(ctx context.Context, skillName, projectPath string) e
 		}
 	}
 
+	select {
+	case <-ctx.Done():
+		return &LinkError{
+			Type:    ErrorTypeFilesystem,
+			Message: "operation cancelled",
+			Err:     ctx.Err(),
+		}
+	default:
+	}
+
 	if err := os.Symlink(skillPath, targetPath); err != nil {
 		return &LinkError{
 			Type:    ErrorTypeFilesystem,
@@ -115,8 +141,23 @@ func (l *Linker) LinkSkill(ctx context.Context, skillName, projectPath string) e
 	existingSkill, err := add.FindSkillByName(skillName)
 	if err != nil {
 		l.logger.Error("Failed to find skill in registry", err, "skill", skillName)
-		os.Remove(targetPath)
+		if removeErr := os.Remove(targetPath); removeErr != nil {
+			l.logger.Error("Failed to clean up symlink after error", removeErr, "path", targetPath)
+		}
 		return fmt.Errorf("failed to find skill '%s' in registry: %w", skillName, err)
+	}
+
+	select {
+	case <-ctx.Done():
+		if removeErr := os.Remove(targetPath); removeErr != nil {
+			l.logger.Error("Failed to clean up symlink after cancellation", removeErr, "path", targetPath)
+		}
+		return &LinkError{
+			Type:    ErrorTypeFilesystem,
+			Message: "operation cancelled",
+			Err:     ctx.Err(),
+		}
+	default:
 	}
 
 	if existingSkill.LinkedProjects == nil {
@@ -132,7 +173,9 @@ func (l *Linker) LinkSkill(ctx context.Context, skillName, projectPath string) e
 
 	if err := add.UpdateSkill(existingSkill); err != nil {
 		l.logger.Error("Failed to update skills registry", err, "skill", skillName)
-		os.Remove(targetPath)
+		if removeErr := os.Remove(targetPath); removeErr != nil {
+			l.logger.Error("Failed to clean up symlink after error", removeErr, "path", targetPath)
+		}
 		return fmt.Errorf("failed to update skills registry: %w", err)
 	}
 

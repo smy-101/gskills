@@ -7,28 +7,8 @@ import (
 	"strings"
 
 	"github.com/smy-101/gskills/internal/add"
-	"github.com/smy-101/gskills/internal/types"
 )
 
-// findSkillByName searches for a skill by its name in the registry.
-// Returns the skill metadata if found, or an error if not found.
-func findSkillByName(name string) (*types.SkillMetadata, error) {
-	skills, err := add.LoadRegistry()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load registry: %w", err)
-	}
-
-	for _, skill := range skills {
-		if skill.Name == name {
-			return &skill, nil
-		}
-	}
-
-	return nil, fmt.Errorf("skill '%s' not found", name)
-}
-
-// promptForConfirmation asks the user to confirm before removing a skill.
-// Returns true if the user confirms (y/yes), false otherwise.
 func promptForConfirmation(name string) (bool, error) {
 	fmt.Printf("Are you sure you want to remove skill '%s'? [y/N]: ", name)
 
@@ -38,7 +18,10 @@ func promptForConfirmation(name string) (bool, error) {
 		if err == io.EOF {
 			return false, nil
 		}
-		return false, nil
+		if err.Error() == "unexpected newline" {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to read user input: %w", err)
 	}
 
 	response = strings.TrimSpace(strings.ToLower(response))
@@ -115,7 +98,10 @@ func promptForConfirmationWithLinks(name string, linkCount int) (bool, error) {
 		if err == io.EOF {
 			return false, nil
 		}
-		return false, nil
+		if err.Error() == "unexpected newline" {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to read user input: %w", err)
 	}
 
 	response = strings.TrimSpace(strings.ToLower(response))
