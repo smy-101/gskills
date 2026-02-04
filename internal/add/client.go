@@ -63,7 +63,7 @@ func NewClient(token string) *Client {
 }
 
 // SetBaseURL sets the base URL for GitHub API requests.
-// This method is intended for testing purposes only.
+// This method is intended for testing purposes only and should not be used in production code.
 func (c *Client) SetBaseURL(url string) {
 	c.baseURL = url
 }

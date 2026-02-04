@@ -27,6 +27,20 @@ func NewLinker() *Linker {
 	}
 }
 
+// checkContextCanceled checks if the context has been canceled and returns an appropriate error.
+func (l *Linker) checkContextCanceled(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return &LinkError{
+			Type:    ErrorTypeFilesystem,
+			Message: "operation cancelled",
+			Err:     ctx.Err(),
+		}
+	default:
+		return nil
+	}
+}
+
 // LinkSkill creates a symlink from the gskills-managed skill directory to
 // the target project's .opencode/skills/<skill_name> directory.
 // It updates the skills registry with linked skill metadata.
@@ -46,14 +60,8 @@ func (l *Linker) LinkSkill(ctx context.Context, skillName, projectPath string) e
 		}
 	}
 
-	select {
-	case <-ctx.Done():
-		return &LinkError{
-			Type:    ErrorTypeFilesystem,
-			Message: "operation cancelled",
-			Err:     ctx.Err(),
-		}
-	default:
+	if err := l.checkContextCanceled(ctx); err != nil {
+		return err
 	}
 
 	skillPath, err := l.getSkillPath(skillName)
@@ -61,14 +69,8 @@ func (l *Linker) LinkSkill(ctx context.Context, skillName, projectPath string) e
 		return err
 	}
 
-	select {
-	case <-ctx.Done():
-		return &LinkError{
-			Type:    ErrorTypeFilesystem,
-			Message: "operation cancelled",
-			Err:     ctx.Err(),
-		}
-	default:
+	if err := l.checkContextCanceled(ctx); err != nil {
+		return err
 	}
 
 	absProjectPath, err := filepath.Abs(projectPath)
@@ -80,14 +82,8 @@ func (l *Linker) LinkSkill(ctx context.Context, skillName, projectPath string) e
 		}
 	}
 
-	select {
-	case <-ctx.Done():
-		return &LinkError{
-			Type:    ErrorTypeFilesystem,
-			Message: "operation cancelled",
-			Err:     ctx.Err(),
-		}
-	default:
+	if err := l.checkContextCanceled(ctx); err != nil {
+		return err
 	}
 
 	targetDir := filepath.Join(absProjectPath, constants.OpencodeSkillsDir)
@@ -117,14 +113,8 @@ func (l *Linker) LinkSkill(ctx context.Context, skillName, projectPath string) e
 		}
 	}
 
-	select {
-	case <-ctx.Done():
-		return &LinkError{
-			Type:    ErrorTypeFilesystem,
-			Message: "operation cancelled",
-			Err:     ctx.Err(),
-		}
-	default:
+	if err := l.checkContextCanceled(ctx); err != nil {
+		return err
 	}
 
 	if err := os.Symlink(skillPath, targetPath); err != nil {
@@ -144,17 +134,11 @@ func (l *Linker) LinkSkill(ctx context.Context, skillName, projectPath string) e
 		return fmt.Errorf("failed to find skill '%s' in registry: %w", skillName, err)
 	}
 
-	select {
-	case <-ctx.Done():
+	if err := l.checkContextCanceled(ctx); err != nil {
 		if removeErr := os.Remove(targetPath); removeErr != nil {
 			l.logger.Error("Failed to clean up symlink after cancellation", removeErr, "path", targetPath)
 		}
-		return &LinkError{
-			Type:    ErrorTypeFilesystem,
-			Message: "operation cancelled",
-			Err:     ctx.Err(),
-		}
-	default:
+		return err
 	}
 
 	if existingSkill.LinkedProjects == nil {

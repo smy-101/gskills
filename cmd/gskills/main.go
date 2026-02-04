@@ -52,9 +52,9 @@ func initViper() {
 	}
 
 	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-		} else {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			fmt.Printf("Error reading config file: %v\n", err)
+			os.Exit(1)
 		}
 	}
 }

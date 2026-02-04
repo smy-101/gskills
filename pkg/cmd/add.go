@@ -3,7 +3,6 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/smy-101/gskills/internal/add"
 	"github.com/spf13/cobra"
@@ -26,8 +25,7 @@ var addCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		url := args[0]
 		if err := executeAdd(url); err != nil {
-			fmt.Printf("Error adding skill: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("failed to add skill: %w", err)
 		}
 		return nil
 	},
