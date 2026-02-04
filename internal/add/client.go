@@ -3,6 +3,7 @@ package add
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -42,9 +43,18 @@ type Client struct {
 // The token can be empty for public repositories.
 // The client is configured with a 30-second timeout, 3 retries, and 2-second retry wait time.
 func NewClient(token string) *Client {
-	client := resty.New()
+	httpClient := &http.Client{
+		Timeout: defaultTimeout,
+		Transport: &http.Transport{
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 10,
+			IdleConnTimeout:     90 * time.Second,
+			ForceAttemptHTTP2:   true,
+		},
+	}
 
-	client.SetTimeout(defaultTimeout)
+	client := resty.NewWithClient(httpClient)
+
 	client.SetRetryCount(maxRetries)
 	client.SetRetryWaitTime(retryWaitTime)
 
@@ -269,8 +279,16 @@ func (c *Client) downloadRecursive(ctx context.Context, repoInfo *GitHubRepoInfo
 		select {
 		case <-ctx.Done():
 			return
-		case sem <- struct{}{}:
-			defer func() { <-sem }()
+		default:
+		}
+
+		sem <- struct{}{}
+		defer func() { <-sem }()
+
+		select {
+		case <-ctx.Done():
+			return
+		default:
 		}
 
 		contents, err := c.GetGitHubContents(ctx, repoInfo, remotePath)
