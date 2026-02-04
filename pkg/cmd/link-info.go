@@ -35,7 +35,7 @@ func executeLinkInfo(skillName string) error {
 	fmt.Printf("Store Path: %s\n", skill.StorePath)
 	fmt.Printf("\n")
 
-	if skill.LinkedProjects == nil || len(skill.LinkedProjects) == 0 {
+	if len(skill.LinkedProjects) == 0 {
 		fmt.Println("This skill is not linked to any projects.")
 		return nil
 	}
