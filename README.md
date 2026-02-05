@@ -2,9 +2,9 @@
 
 > A powerful CLI tool for managing and linking skill packages from GitHub repositories
 
-[![Go Version](https://img.shields.io/badge/Go-1.25.5+-00ADD8?style=flat&logo=go)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Test Coverage](https://img.shields.io/badge/coverage-61.5%25-brightgreen)](README.md#testing)
+[![Test Coverage](https://img.shields.io/badge/coverage-57.6%25-brightgreen)](README.md#testing)
 
 ## 🚀 Features
 
@@ -15,6 +15,7 @@
 - **Atomic Operations**: Safe file operations with automatic rollback on errors
 - **Rate Limit Handling**: Intelligent retry with exponential backoff for GitHub API limits
 - **Registry Management**: Centralized skill metadata storage with JSON persistence
+- **Binary Initialization**: First-time setup with automatic PATH configuration and shell detection
 
 ## 📦 Installation
 
@@ -36,6 +37,35 @@ go install github.com/smy-101/gskills/cmd/gskills@latest
 ```
 
 ## 🎯 Quick Start
+
+### 0. Initialize (First Time Setup)
+
+Install gskills binary to `~/.gskills/bin` and add to PATH:
+
+```bash
+gskills init
+```
+
+The tool will:
+- Detect your shell (bash/zsh/fish)
+- Copy binary to `~/.gskills/bin`
+- Add export statement to shell config
+- Provide source command to apply changes
+
+Example output:
+```
+✓ 检测到源路径: /usr/local/bin/gskills
+✓ 复制二进制文件: /home/user/.gskills/bin/gskills
+✓ 检测到 shell: zsh
+✓ 更新配置文件: /home/user/.zshrc
+
+gskills 已成功初始化！
+
+请执行以下命令使配置生效:
+  source ~/.zshrc
+
+或重新打开终端窗口。
+```
 
 ### 1. Add a Skill
 
@@ -171,6 +201,26 @@ Remove a skill from the local registry and filesystem.
 
 **Warning**: This will delete the skill directory and all its links.
 
+### `gskills init`
+
+Initialize gskills by installing the binary to `~/.gskills/bin` and adding it to PATH.
+
+**This command will:**
+- Detect your current shell (bash, zsh, or fish)
+- Copy the gskills binary to `~/.gskills/bin`
+- Add the appropriate export statement to your shell configuration file
+- Display the source command needed to apply the changes
+
+**Example**:
+```bash
+gskills init
+```
+
+**Supported Shells**:
+- `bash` - Updates `~/.bashrc` or `~/.bash_profile` (macOS)
+- `zsh` - Updates `~/.zshrc`
+- `fish` - Updates `~/.config/fish/config.fish`
+
 ### `gskills config`
 
 Display current configuration settings.
@@ -178,6 +228,35 @@ Display current configuration settings.
 **Example**:
 ```bash
 gskills config
+```
+
+### `gskills tidy`
+
+Clean up stale registry entries and orphaned symlinks.
+
+**This command performs two cleanup operations:**
+1. Removes registry entries pointing to non-existent symlinks
+2. Deletes orphaned symlinks pointing to deleted skills
+
+**Features**:
+- Uses worker pool pattern with semaphore-controlled concurrency (max 10 workers)
+- Context cancellation support for safe interruption
+- Generates detailed cleanup report
+
+**Example**:
+```bash
+gskills tidy
+```
+
+**Output**:
+```
+正在清理无用的技能链接...
+
+清理完成！
+• 移除了 3 个无效的注册表项
+• 删除了 2 个孤立的符号链接
+
+已检查 5 个技能，扫描了 4 个项目目录
 ```
 
 ### `gskills install`
@@ -235,12 +314,17 @@ gskills/
 │       ├── list.go
 │       ├── remove.go
 │       ├── update.go
+│       ├── init.go        # Initialization command
+│       ├── tidy.go        # Cleanup command
+│       ├── install.go     # Project installation
 │       └── ...
 ├── internal/
 │   ├── add/               # Skill download and installation
+│   ├── initializer/       # Binary installation and PATH setup
 │   ├── link/              # Symlink management
 │   ├── registry/          # Skill registry persistence
 │   ├── remove/            # Skill removal logic
+│   ├── tidy/              # Cleanup operations
 │   ├── update/            # Update checking and application
 │   ├── types/             # Shared type definitions
 │   └── constants/         # Application constants
@@ -278,7 +362,7 @@ go tool cover -html=coverage.out
 go tool cover -func=coverage.out
 ```
 
-**Current Coverage**: 61.5%
+**Current Coverage**: 57.6%
 
 ### Run Specific Tests
 
@@ -327,13 +411,17 @@ golangci-lint run
 
 ### Architecture Highlights
 
-- **Concurrent Downloads**: Uses worker pools with semaphore-controlled concurrency
+- **Concurrent Downloads**: Uses worker pools with semaphore-controlled concurrency (maxWorkers=10)
 - **Context Propagation**: Proper context cancellation throughout the call stack
 - **Atomic File Operations**: All registry writes use atomic rename patterns
 - **Error Wrapping**: Comprehensive error chains with `%w` verb
 - **Custom Error Types**: Typed errors with `Is()` and `Unwrap()` support
 - **Table-Driven Tests**: Comprehensive test coverage with subtests
 - **HTTP Mocking**: Uses `httptest.Server` for integration testing
+- **Worker Pool Pattern**: Semaphore-controlled concurrency for cleanup operations (max 10 workers)
+- **Structured Logging**: Logger interface with Debug/Info/Warn/Error levels for observability
+- **Shell Detection**: Auto-detects bash/zsh/fish with appropriate config file handling (.bashrc, .zshrc, config.fish)
+- **Context Cancellation**: Proper cleanup support in concurrent tidy operations
 
 ## 🤝 Contributing
 
@@ -397,4 +485,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**Made with ❤️ using Go 1.25.5+**
+**Made with ❤️ using Go 1.21+**
