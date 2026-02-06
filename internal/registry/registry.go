@@ -66,7 +66,7 @@ func SaveRegistryWithPath(registryPath string, skills []types.SkillMetadata) err
 		return fmt.Errorf("failed to create registry directory: %w", err)
 	}
 
-	data, err := json.Marshal(skills)
+	data, err := json.MarshalIndent(skills, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal registry: %w", err)
 	}

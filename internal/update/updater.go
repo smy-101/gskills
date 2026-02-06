@@ -138,12 +138,6 @@ func (u *Updater) CheckUpdate(skill *types.SkillMetadata) (hasUpdate bool, newSH
 func (u *Updater) getCommitSHAWithRetry(ctx context.Context, repoInfo *add.GitHubRepoInfo) (string, error) {
 	var lastErr error
 	for attempt := range maxRetryAttempt {
-		select {
-		case <-ctx.Done():
-			return "", ctx.Err()
-		default:
-		}
-
 		sha, err := u.client.GetBranchCommitSHA(ctx, repoInfo)
 		if err == nil {
 			return sha, nil
